@@ -1,0 +1,66 @@
+# generated: 2025-12-13T21:41:00+08:00
+# project: AutoQA-Agent
+# project_key: autoqa-agent
+# tracking_system: file-system
+# story_location: docs/sprint-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - drafted: Story file created in stories folder
+#   - ready-for-dev: Draft approved and story context created
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - completed: Retrospective has been done
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically drafts next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2025-12-13T21:41:00+08:00
+project: AutoQA-Agent
+project_key: autoqa-agent
+tracking_system: file-system
+story_location: "docs/sprint-artifacts"
+
+development_status:
+  epic-1: in-progress
+  1-1-set-up-initial-project-from-starter-template: done
+  1-2-autoqa-init-autoqa-config-json: backlog
+  1-3-autoqa-init-create-specs-example: backlog
+  1-4-autoqa-init-check-anthropic-api-key: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-autoqa-run-args-spec-discovery: backlog
+  2-2-headless-debug-url-validation: backlog
+  2-3-parse-markdown-spec-preconditions-steps-assertions: backlog
+  2-4-runner-spec-lifecycle-browser-context-page: backlog
+  2-5-playwright-action-tools-toolresult: backlog
+  2-6-pre-action-screenshot-inject-turn-compress: backlog
+  2-7-logging-observability-structured: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-assert-tools-asserttextpresent-assertelementvisible: backlog
+  3-2-errors-to-agent-sdk-self-heal-retry: backlog
+  3-3-self-heal-guardrails-max-tool-calls-errors-retries: backlog
+  3-4-failure-artifacts-exit-codes-ci: backlog
+  epic-3-retrospective: optional

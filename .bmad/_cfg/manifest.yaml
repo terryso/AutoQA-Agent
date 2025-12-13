@@ -1,0 +1,12 @@
+installation:
+  version: 6.0.0-alpha.16
+  installDate: '2025-12-13T10:22:17.365Z'
+  lastUpdated: '2025-12-13T10:22:17.365Z'
+modules:
+  - core
+  - bmm
+customModules: []
+ides:
+  - claude-code
+  - windsurf
+  - gemini
