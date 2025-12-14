@@ -50,7 +50,7 @@ development_status:
 
   epic-2: in-progress
   2-1-autoqa-run-args-spec-discovery: done
-  2-2-headless-debug-url-validation: backlog
+  2-2-headless-debug-url-validation: done
   2-3-parse-markdown-spec-preconditions-steps-assertions: backlog
   2-4-runner-spec-lifecycle-browser-context-page: backlog
   2-5-playwright-action-tools-toolresult: backlog

@@ -2,7 +2,16 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const runPreflightMock = vi.fn(async (_options: any) => ({ ok: true as const }))
+vi.mock('../../src/runner/preflight.js', () => ({
+  runPreflight: runPreflightMock,
+}))
+
+beforeEach(() => {
+  runPreflightMock.mockClear()
+})
 
 describe('autoqa run (args & spec discovery)', () => {
   it('discovers Markdown specs under a directory recursively in deterministic order', async () => {
@@ -32,7 +41,7 @@ describe('autoqa run (args & spec discovery)', () => {
         writeErr: () => {},
       })
 
-      await program.parseAsync(['run', specsDir], { from: 'user' })
+      await program.parseAsync(['run', specsDir, '--url', 'http://example.test'], { from: 'user' })
 
       const lines = stdout.trim().split('\n')
 
@@ -69,7 +78,7 @@ describe('autoqa run (args & spec discovery)', () => {
         writeErr: () => {},
       })
 
-      await program.parseAsync(['run', specPath], { from: 'user' })
+      await program.parseAsync(['run', specPath, '--url', 'http://example.test'], { from: 'user' })
 
       const lines = stdout.trim().split('\n')
       expect(lines).toEqual([specPath])
@@ -96,7 +105,7 @@ describe('autoqa run (args & spec discovery)', () => {
     let exitCode: number | undefined
 
     try {
-      await program.parseAsync(['run', 'does-not-exist.md'], { from: 'user' })
+      await program.parseAsync(['run', 'does-not-exist.md', '--url', 'http://example.test'], { from: 'user' })
     } catch (err: any) {
       exitCode = err.exitCode
     }
@@ -132,7 +141,7 @@ describe('autoqa run (args & spec discovery)', () => {
       let exitCode: number | undefined
 
       try {
-        await program.parseAsync(['run', emptyDir], { from: 'user' })
+        await program.parseAsync(['run', emptyDir, '--url', 'http://example.test'], { from: 'user' })
       } catch (err: any) {
         exitCode = err.exitCode
       }
@@ -171,7 +180,7 @@ describe('autoqa run (args & spec discovery)', () => {
       let exitCode: number | undefined
 
       try {
-        await program.parseAsync(['run', filePath], { from: 'user' })
+        await program.parseAsync(['run', filePath, '--url', 'http://example.test'], { from: 'user' })
       } catch (err: any) {
         exitCode = err.exitCode
       }
@@ -222,7 +231,7 @@ describe('autoqa run (args & spec discovery)', () => {
     let exitCode: number | undefined
 
     try {
-      await program.parseAsync(['run', 'no-access.md'], { from: 'user' })
+      await program.parseAsync(['run', 'no-access.md', '--url', 'http://example.test'], { from: 'user' })
     } catch (err: any) {
       exitCode = err.exitCode
     } finally {
@@ -273,7 +282,7 @@ describe('autoqa run (args & spec discovery)', () => {
     let exitCode: number | undefined
 
     try {
-      await program.parseAsync(['run', 'too-long.md'], { from: 'user' })
+      await program.parseAsync(['run', 'too-long.md', '--url', 'http://example.test'], { from: 'user' })
     } catch (err: any) {
       exitCode = err.exitCode
     } finally {
@@ -314,11 +323,273 @@ describe('autoqa run (args & spec discovery)', () => {
         writeErr: () => {},
       })
 
-      await program.parseAsync(['run', specsDir], { from: 'user' })
+      await program.parseAsync(['run', specsDir, '--url', 'http://example.test'], { from: 'user' })
 
       const lines = stdout.trim().split('\n')
 
       expect(lines).toEqual([linkedSpec, realSpec].sort())
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('exits with code 2 when --url is missing', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+
+      let errOutput = ''
+      program.configureOutput({
+        writeOut: () => {},
+        writeErr: (str: string) => {
+          errOutput += str
+        },
+      })
+      program.exitOverride()
+
+      let exitCode: number | undefined
+      try {
+        await program.parseAsync(['run', specPath], { from: 'user' })
+      } catch (err: any) {
+        exitCode = err.exitCode
+      }
+
+      expect(exitCode).toBe(2)
+      expect(errOutput).toContain('Base URL is required')
+      expect(runPreflightMock).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('exits with code 2 when --debug and --headless are both provided', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+
+      let errOutput = ''
+      program.configureOutput({
+        writeOut: () => {},
+        writeErr: (str: string) => {
+          errOutput += str
+        },
+      })
+      program.exitOverride()
+
+      let exitCode: number | undefined
+      try {
+        await program.parseAsync(
+          ['run', specPath, '--url', 'http://example.test', '--debug', '--headless'],
+          { from: 'user' },
+        )
+      } catch (err: any) {
+        exitCode = err.exitCode
+      }
+
+      expect(exitCode).toBe(2)
+      expect(errOutput).toContain('Conflicting options')
+      expect(runPreflightMock).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('exits with code 2 when --url is not a valid URL', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+
+      let errOutput = ''
+      program.configureOutput({
+        writeOut: () => {},
+        writeErr: (str: string) => {
+          errOutput += str
+        },
+      })
+      program.exitOverride()
+
+      let exitCode: number | undefined
+      try {
+        await program.parseAsync(['run', specPath, '--url', 'not-a-url'], { from: 'user' })
+      } catch (err: any) {
+        exitCode = err.exitCode
+      }
+
+      expect(exitCode).toBe(2)
+      expect(errOutput).toContain('Invalid --url')
+      expect(runPreflightMock).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('normalizes --url by removing trailing slash (passed to preflight)', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+      program.configureOutput({ writeOut: () => {}, writeErr: () => {} })
+
+      await program.parseAsync(['run', specPath, '--url', 'http://example.test/'], { from: 'user' })
+
+      expect(runPreflightMock).toHaveBeenCalledTimes(1)
+      expect(runPreflightMock.mock.calls[0]?.[0]).toMatchObject({
+        baseUrl: 'http://example.test',
+      })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('sanitizes baseUrl in logs (origin only)', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    let errOutput = ''
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+      program.configureOutput({
+        writeOut: () => {},
+        writeErr: (str: string) => {
+          errOutput += str
+        },
+      })
+
+      await program.parseAsync(['run', specPath, '--url', 'http://user:pass@example.test/path?token=secret'], {
+        from: 'user',
+      })
+
+      expect(errOutput).toContain('baseUrl=http://example.test')
+      expect(errOutput).not.toContain('user:pass')
+      expect(errOutput).not.toContain('token=secret')
+      expect(errOutput).not.toContain('/path')
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('defaults to headless=true when not in debug mode', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+      program.configureOutput({ writeOut: () => {}, writeErr: () => {} })
+
+      await program.parseAsync(['run', specPath, '--url', 'http://example.test'], { from: 'user' })
+
+      expect(runPreflightMock).toHaveBeenCalledTimes(1)
+      expect(runPreflightMock.mock.calls[0]?.[0]).toMatchObject({
+        headless: true,
+        debug: false,
+        baseUrl: 'http://example.test',
+      })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses headless=false when --debug is provided', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+      program.configureOutput({ writeOut: () => {}, writeErr: () => {} })
+
+      await program.parseAsync(['run', specPath, '--url', 'http://example.test', '--debug'], { from: 'user' })
+
+      expect(runPreflightMock).toHaveBeenCalledTimes(1)
+      expect(runPreflightMock.mock.calls[0]?.[0]).toMatchObject({
+        headless: false,
+        debug: true,
+        baseUrl: 'http://example.test',
+      })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses headless=true when --headless is explicitly provided', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-run-'))
+    const originalCwd = process.cwd()
+
+    try {
+      const specPath = join(tempDir, 'single.md')
+      writeFileSync(specPath, '# single\n', 'utf8')
+
+      process.chdir(tempDir)
+
+      const { createProgram } = await import('../../src/cli/program.js')
+      const program = createProgram()
+      program.configureOutput({ writeOut: () => {}, writeErr: () => {} })
+
+      await program.parseAsync(['run', specPath, '--url', 'http://example.test', '--headless'], { from: 'user' })
+
+      expect(runPreflightMock).toHaveBeenCalledTimes(1)
+      expect(runPreflightMock.mock.calls[0]?.[0]).toMatchObject({
+        headless: true,
+        debug: false,
+        baseUrl: 'http://example.test',
+      })
     } finally {
       process.chdir(originalCwd)
       rmSync(tempDir, { recursive: true, force: true })
