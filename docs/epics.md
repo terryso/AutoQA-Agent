@@ -15,7 +15,7 @@ This document provides the complete epic and story breakdown for AutoQA-Agent, d
 
 ### Functional Requirements
 
-FR1: 提供项目初始化命令 `autoqa init`，生成 `autoqa.config.json` 配置文件，并创建 `specs/` 示例目录与 `specs/login-example.md` 示例文档，同时检查并提示用户配置 `ANTHROPIC_API_KEY` 环境变量。
+FR1: 提供项目初始化命令 `autoqa init`，生成 `autoqa.config.json` 配置文件，并创建 `specs/` 示例目录与 `specs/login-example.md` 示例文档，同时检查并提示用户完成鉴权（优先使用 Claude Code 已授权的 Agent SDK；若不可用则提示配置 `ANTHROPIC_API_KEY` 环境变量）。
 FR2: 提供测试执行命令 `autoqa run`，支持运行单个 Markdown 文件或整个目录；支持 `--headless`（默认无头）与 `--debug`（有头便于观察）参数；支持 `--url` 参数指定 Base URL（MVP：暂不从 Markdown 文档读取 Base URL）。
 FR3: 支持 Markdown 语义解析：解析 Markdown 中的 `## Preconditions`（前置条件）与有序列表步骤（含“预期结果/断言”），并将 Markdown 内容转化为 Claude Agent SDK 可理解的 System Prompt 或 Task Context。
 FR4: 实现视觉感知循环（Visual Perception Loop）：在 Agent 调用任何浏览器操作工具（如 click/fill 等）之前，系统必须自动截取当前页面截图（Screenshot），并作为 image block 注入到 Agent SDK 的当前 turn 中。
@@ -58,7 +58,7 @@ FR7: Epic 3 - 断言工具 + 断言失败自愈重试
 ## Epic List
 
 ### Epic 1: 零配置上手（项目初始化）
-用户完成该 Epic 后可以运行 `autoqa init` 一键生成可运行的项目骨架与示例材料，并清楚如何配置 `ANTHROPIC_API_KEY`。
+用户完成该 Epic 后可以运行 `autoqa init` 一键生成可运行的项目骨架与示例材料，并清楚如何完成鉴权（若本机已通过 Claude Code 授权则可直接使用 Agent SDK；否则配置 `ANTHROPIC_API_KEY`）。
 **FRs covered:** FR1
 
 ### Epic 2: 执行闭环（从 Markdown 驱动浏览器完成流程）
@@ -71,7 +71,7 @@ FR7: Epic 3 - 断言工具 + 断言失败自愈重试
 
 ## Epic 1: 零配置上手（项目初始化）
 
-用户完成该 Epic 后可以运行 `autoqa init` 一键生成可运行的项目骨架与示例材料，并清楚如何配置 `ANTHROPIC_API_KEY`。
+用户完成该 Epic 后可以运行 `autoqa init` 一键生成可运行的项目骨架与示例材料，并清楚如何完成鉴权（若本机已通过 Claude Code 授权则可直接使用 Agent SDK；否则配置 `ANTHROPIC_API_KEY`）。
 
 ### Story 1.1: Set up initial project from starter template
   
@@ -115,21 +115,27 @@ FR7: Epic 3 - 断言工具 + 断言失败自愈重试
   **When** 运行 `autoqa init`
  **Then** 应创建 `specs/` 目录
  **And** 应生成一个示例 spec 文件（例如 `specs/login-example.md`），至少包含 `## Preconditions` 与按序步骤（1. 2. 3.）结构
- ### Story 1.4: `autoqa init` 检查并提示 `ANTHROPIC_API_KEY`
+ ### Story 1.4: `autoqa init` 检查并提示鉴权方式（Claude Code 授权 / `ANTHROPIC_API_KEY`）
   
   As a QA 工程师,
-  I want 在运行 `autoqa init` 时得到 `ANTHROPIC_API_KEY` 配置提示，
-  So that 我不会在后续运行时才发现缺少关键环境变量。
+  I want 在运行 `autoqa init` 时得到清晰的鉴权提示（优先使用 Claude Code 已授权的 Agent SDK，否则提示配置 `ANTHROPIC_API_KEY`），
+  So that 我不会在后续运行时才发现缺少关键鉴权配置。
   
   **FRs covered:** FR1
   
   **Acceptance Criteria:**
   
-  **Given** 环境变量 `ANTHROPIC_API_KEY` 未设置
+  **Given** 本机已通过 Claude Code 授权且 Agent SDK 可直接使用该授权
+  **When** 运行 `autoqa init`
+ **Then** CLI 应打印清晰提示说明无需配置 `ANTHROPIC_API_KEY` 也可继续使用
+ **And** `autoqa init` 仍应完成文件生成（配置与示例）并以退出码 `0` 结束
+
+  **Given** 本机未通过 Claude Code 授权（或 Agent SDK 无法使用该授权）
+  **And** 环境变量 `ANTHROPIC_API_KEY` 未设置
   **When** 运行 `autoqa init`
  **Then** CLI 应打印清晰提示说明需要设置 `ANTHROPIC_API_KEY`
  **And** `autoqa init` 仍应完成文件生成（配置与示例）并以退出码 `0` 结束
- 
+
 ## Epic 2: 执行闭环（从 Markdown 驱动浏览器完成流程）
  
  用户完成该 Epic 后可以用 `autoqa run` 执行单个 spec 或目录（含 `--headless` / `--debug` / `--url`），Agent 能通过浏览器工具把流程跑起来；每次动作前自动截图并注入 turn；CLI 输出清晰的过程日志，便于本地与 CI 排障。

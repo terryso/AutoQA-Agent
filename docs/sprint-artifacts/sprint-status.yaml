@@ -44,8 +44,8 @@ development_status:
   epic-1: in-progress
   1-1-set-up-initial-project-from-starter-template: done
   1-2-autoqa-init-autoqa-config-json: done
-  1-3-autoqa-init-create-specs-example: backlog
-  1-4-autoqa-init-check-anthropic-api-key: backlog
+  1-3-autoqa-init-create-specs-example: done
+  1-4-autoqa-init-check-anthropic-api-key: ready-for-dev
   epic-1-retrospective: optional
 
   epic-2: backlog
