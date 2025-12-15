@@ -15,6 +15,7 @@ import { parseMarkdownSpec } from '../../markdown/parse-markdown-spec.js'
 import type { MarkdownSpec } from '../../markdown/spec-types.js'
 import { runAgent } from '../../agent/run-agent.js'
 import { probeAgentSdkAuth, type AgentSdkAuthProbeResult } from '../../auth/probe.js'
+import { createLogger, ensureArtifactDir, getArtifactRootPath } from '../../logging/index.js'
 
 function sanitizeBaseUrlForLog(baseUrl: string): string {
   try {
@@ -77,10 +78,18 @@ export function registerRunCommand(program: Command) {
       }
 
       const runId = randomUUID()
+      const cwd = process.cwd()
+      const artifactRoot = getArtifactRootPath(cwd, runId)
+
+      await ensureArtifactDir(cwd, runId)
+
+      const logger = createLogger({ runId, cwd, debug: validated.value.debug })
+
       writeOutLine(writeErr, `runId=${runId}`)
       writeOutLine(writeErr, `baseUrl=${sanitizeBaseUrlForLog(validated.value.baseUrl)}`)
       writeOutLine(writeErr, `headless=${validated.value.headless}`)
       writeOutLine(writeErr, `debug=${validated.value.debug}`)
+      writeOutLine(writeErr, `artifactRoot=${artifactRoot}`)
 
       if (validated.value.debug) {
         writeOutLine(writeErr, `node=${process.version}`)
@@ -152,13 +161,26 @@ export function registerRunCommand(program: Command) {
         }
       }
 
+      const runStartTime = Date.now()
+
+      logger.log({
+        event: 'autoqa.run.started',
+        runId,
+        baseUrl: sanitizeBaseUrlForLog(validated.value.baseUrl),
+        headless: validated.value.headless,
+        debug: validated.value.debug,
+        artifactRoot,
+        specCount: parsedSpecs.length,
+      })
+
       const runResult = await runSpecs({
         runId,
         baseUrl: validated.value.baseUrl,
         headless: validated.value.headless,
         debug: validated.value.debug,
         specs: parsedSpecs,
-        onSpec: async ({ runId, baseUrl, specPath, spec, page }) => {
+        logger,
+        onSpec: async ({ runId, baseUrl, specPath, spec, page, logger }) => {
           await runAgent({
             runId,
             baseUrl,
@@ -166,13 +188,26 @@ export function registerRunCommand(program: Command) {
             specPath,
             spec,
             page,
-            cwd: process.cwd(),
+            cwd,
+            logger,
           })
         },
       })
 
       if (!runResult.ok) {
         const exitCode = runResult.code === 'SPEC_EXECUTION_FAILED' ? 1 : 2
+
+        logger.log({
+          event: 'autoqa.run.finished',
+          runId,
+          exitCode,
+          durationMs: Date.now() - runStartTime,
+          specsPassed: runResult.specsPassed ?? 0,
+          specsFailed: runResult.specsFailed ?? 1,
+          failureSummary: runResult.message,
+        })
+
+        await logger.flush()
         program.error(runResult.message, { exitCode })
         return
       }
@@ -184,6 +219,17 @@ export function registerRunCommand(program: Command) {
       if (validated.value.debug && runResult.chromiumVersion) {
         writeOutLine(writeErr, `chromiumVersion=${runResult.chromiumVersion}`)
       }
+
+      logger.log({
+        event: 'autoqa.run.finished',
+        runId,
+        exitCode: 0,
+        durationMs: Date.now() - runStartTime,
+        specsPassed: parsedSpecs.length,
+        specsFailed: 0,
+      })
+
+      await logger.flush()
 
       for (const specPath of result.specs) {
         writeOutLine(writeOut, specPath)

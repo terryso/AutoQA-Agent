@@ -4,6 +4,7 @@ import type { BrowserContext, Page } from 'playwright'
 
 import type { MarkdownSpec } from '../markdown/spec-types.js'
 import { createBrowser } from '../browser/create-browser.js'
+import type { Logger } from '../logging/index.js'
 
 export type ParsedSpec = {
   specPath: string
@@ -16,6 +17,7 @@ export type RunSpecFn = (input: {
   specPath: string
   spec: MarkdownSpec
   page: Page
+  logger: Logger
 }) => Promise<void> | void
 
 export type RunSpecsOptions = {
@@ -24,6 +26,7 @@ export type RunSpecsOptions = {
   headless: boolean
   debug: boolean
   specs: ParsedSpec[]
+  logger: Logger
   onSpec?: RunSpecFn
 }
 
@@ -35,8 +38,8 @@ export type RunSpecsFailureCode =
   | 'RUN_FAILED'
 
 export type RunSpecsResult =
-  | { ok: true; chromiumVersion?: string; playwrightVersion?: string }
-  | { ok: false; code: RunSpecsFailureCode; message: string; cause?: unknown }
+  | { ok: true; chromiumVersion?: string; playwrightVersion?: string; specsPassed: number; specsFailed: number }
+  | { ok: false; code: RunSpecsFailureCode; message: string; cause?: unknown; specsPassed?: number; specsFailed?: number }
 
 function getPlaywrightVersion(): string | undefined {
   const require = createRequire(import.meta.url)
@@ -88,6 +91,7 @@ async function safeClose(closeable: { close: () => unknown } | undefined): Promi
 
 export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult> {
   let browser: Awaited<ReturnType<typeof createBrowser>> | undefined
+  const { logger } = options
 
   try {
     browser = await createBrowser({
@@ -100,10 +104,14 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
       code: 'BROWSER_LAUNCH_FAILED',
       message: `Failed to launch browser with Playwright${formatCauseSuffix(err)}`,
       cause: err,
+      specsPassed: 0,
+      specsFailed: 0,
     }
   }
 
   let activeSpecPath: string | undefined
+  let specsPassed = 0
+  let specsFailed = 0
 
   try {
     const chromiumVersion = options.debug ? browser.version() : undefined
@@ -111,6 +119,13 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
 
     for (const spec of options.specs) {
       activeSpecPath = spec.specPath
+      const specStartTime = Date.now()
+
+      logger.log({
+        event: 'autoqa.spec.started',
+        runId: options.runId,
+        specPath: spec.specPath,
+      })
 
       let context: BrowserContext | undefined
       try {
@@ -121,6 +136,15 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
           },
         })
       } catch (err: unknown) {
+        specsFailed++
+        logger.log({
+          event: 'autoqa.spec.finished',
+          runId: options.runId,
+          specPath: spec.specPath,
+          durationMs: Date.now() - specStartTime,
+          ok: false,
+          failureReason: `CONTEXT_CREATE_FAILED: ${formatCauseSuffix(err)}`,
+        })
         throw setRunSpecsCode(err, 'CONTEXT_CREATE_FAILED')
       }
 
@@ -130,6 +154,15 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
         try {
           page = await context.newPage()
         } catch (err: unknown) {
+          specsFailed++
+          logger.log({
+            event: 'autoqa.spec.finished',
+            runId: options.runId,
+            specPath: spec.specPath,
+            durationMs: Date.now() - specStartTime,
+            ok: false,
+            failureReason: `PAGE_CREATE_FAILED: ${formatCauseSuffix(err)}`,
+          })
           throw setRunSpecsCode(err, 'PAGE_CREATE_FAILED')
         }
 
@@ -140,8 +173,26 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
             specPath: spec.specPath,
             spec: spec.spec,
             page,
+            logger,
+          })
+          specsPassed++
+          logger.log({
+            event: 'autoqa.spec.finished',
+            runId: options.runId,
+            specPath: spec.specPath,
+            durationMs: Date.now() - specStartTime,
+            ok: true,
           })
         } catch (err: unknown) {
+          specsFailed++
+          logger.log({
+            event: 'autoqa.spec.finished',
+            runId: options.runId,
+            specPath: spec.specPath,
+            durationMs: Date.now() - specStartTime,
+            ok: false,
+            failureReason: `SPEC_EXECUTION_FAILED: ${formatCauseSuffix(err)}`,
+          })
           throw setRunSpecsCode(err, 'SPEC_EXECUTION_FAILED')
         }
       } finally {
@@ -150,7 +201,7 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
       }
     }
 
-    return { ok: true, chromiumVersion, playwrightVersion }
+    return { ok: true, chromiumVersion, playwrightVersion, specsPassed, specsFailed }
   } catch (err: unknown) {
     const specPart = activeSpecPath ? `: ${activeSpecPath}` : ''
     return {
@@ -158,6 +209,8 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
       code: getRunSpecsCode(err) ?? 'RUN_FAILED',
       message: `Failed to run spec${specPart}${formatCauseSuffix(err)}`,
       cause: err,
+      specsPassed,
+      specsFailed,
     }
   } finally {
     await safeClose(browser)

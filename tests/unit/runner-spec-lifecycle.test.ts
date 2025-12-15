@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { MarkdownSpec } from '../../src/markdown/spec-types.js'
+import type { Logger } from '../../src/logging/index.js'
+
+const mockLogger: Logger = {
+  log: vi.fn(),
+  flush: vi.fn(async () => {}),
+}
 
 const dummySpec: MarkdownSpec = {
   preconditions: ['ready'],
@@ -49,6 +55,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
         { specPath: '/specs/a.md', spec: dummySpec },
         { specPath: '/specs/b.md', spec: dummySpec },
       ],
+      logger: mockLogger,
       onSpec,
     })
 
@@ -118,6 +125,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
       headless: true,
       debug: false,
       specs: [{ specPath: '/specs/fail.md', spec: dummySpec }],
+      logger: mockLogger,
       onSpec,
     })
 
@@ -157,6 +165,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
       headless: false,
       debug: true,
       specs: [{ specPath: '/specs/a.md', spec: dummySpec }],
+      logger: mockLogger,
       onSpec: vi.fn(async () => {}),
     })
 

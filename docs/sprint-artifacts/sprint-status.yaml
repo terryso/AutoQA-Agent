@@ -55,7 +55,7 @@ development_status:
   2-4-runner-spec-lifecycle-browser-context-page: done
   2-5-playwright-action-tools-toolresult: done
   2-6-pre-action-screenshot-inject-turn-compress: done
-  2-7-logging-observability-structured: backlog
+  2-7-logging-observability-structured: done
   2-8-ax-aria-snapshot: backlog
   2-9-playwright-trace-recording-retention: backlog
   epic-2-retrospective: optional

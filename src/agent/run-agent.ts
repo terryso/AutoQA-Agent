@@ -4,6 +4,7 @@ import type { Page } from 'playwright'
 
 import type { MarkdownSpec } from '../markdown/spec-types.js'
 import { createBrowserToolsMcpServer } from './browser-tools-mcp.js'
+import type { Logger } from '../logging/index.js'
 
 export type RunAgentOptions = {
   runId: string
@@ -13,6 +14,7 @@ export type RunAgentOptions = {
   spec: MarkdownSpec
   page: Page
   cwd?: string
+  logger: Logger
 }
 
 function buildPrompt(input: Pick<RunAgentOptions, 'baseUrl' | 'specPath' | 'spec'>): string {
@@ -98,6 +100,8 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
     runId: options.runId,
     debug: options.debug,
     cwd: options.cwd,
+    specPath: options.specPath,
+    logger: options.logger,
   })
 
   writeDebug(options.debug, 'mcp=browser (navigate/click/fill/scroll/wait)')

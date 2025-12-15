@@ -6,6 +6,8 @@ import type { Page } from 'playwright'
 import { click, fill, navigate, scroll, wait } from '../tools/index.js'
 import type { ContentBlock } from './pre-action-screenshot.js'
 import { runWithPreActionScreenshot } from './pre-action-screenshot.js'
+import type { Logger } from '../logging/index.js'
+import { redactToolInput, sanitizeRelativePath } from '../logging/index.js'
 
 function normalizeToolStringInput(value: string): string {
   const s = (value ?? '').trim()
@@ -62,6 +64,8 @@ export type CreateBrowserToolsMcpServerOptions = {
   runId: string
   debug: boolean
   cwd?: string
+  specPath: string
+  logger: Logger
 }
 
 const DEFAULT_JPEG_QUALITY = 60
@@ -71,6 +75,58 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
   const nextFileBaseName = (toolName: string) => {
     counter += 1
     return `${toolName}-${counter}`
+  }
+
+  const { logger, specPath } = options
+  const cwd = options.cwd ?? process.cwd()
+
+  function logToolCall(toolName: string, toolInput: Record<string, unknown>): void {
+    logger.log({
+      event: 'autoqa.tool.called',
+      runId: options.runId,
+      specPath,
+      toolName,
+      stepIndex: null,
+      toolInput: redactToolInput(toolName, toolInput),
+    })
+  }
+
+  function logToolResult(
+    toolName: string,
+    startTime: number,
+    result: { ok: boolean; error?: any },
+    meta: { error?: string; screenshot?: { mimeType?: string; width?: number; height?: number; path?: string } },
+  ): void {
+    const event: any = {
+      event: 'autoqa.tool.result',
+      runId: options.runId,
+      specPath,
+      toolName,
+      stepIndex: null,
+      toolDurationMs: Date.now() - startTime,
+      ok: result.ok,
+    }
+
+    if (!result.ok && result.error) {
+      event.error = {
+        code: result.error.code,
+        message: result.error.message,
+        retriable: result.error.retriable,
+      }
+    }
+
+    if (meta.screenshot?.path) {
+      event.screenshot = {
+        mimeType: meta.screenshot.mimeType,
+        width: meta.screenshot.width,
+        height: meta.screenshot.height,
+        relativePath: sanitizeRelativePath(meta.screenshot.path, cwd),
+      }
+    } else if (meta.error) {
+      event.screenshotError = meta.error
+    }
+
+    logger.log(event)
   }
 
   return createSdkMcpServer({
@@ -85,6 +141,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         },
         async (args) => {
           const url = normalizeToolStringInput(args.url)
+          const startTime = Date.now()
+          logToolCall('navigate', { url })
           writeDebug(options.debug, `mcp_tool=navigate url=${url}`)
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -95,6 +153,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             quality: DEFAULT_JPEG_QUALITY,
             action: () => navigate({ page: options.page, baseUrl: options.baseUrl, url }),
           })
+
+          logToolResult('navigate', startTime, result as any, meta)
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -111,6 +171,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         },
         async (args) => {
           const targetDescription = normalizeToolStringInput(args.targetDescription)
+          const startTime = Date.now()
+          logToolCall('click', { targetDescription })
           writeDebug(options.debug, `mcp_tool=click target=${targetDescription}`)
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -121,6 +183,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             quality: DEFAULT_JPEG_QUALITY,
             action: () => click({ page: options.page, targetDescription }),
           })
+
+          logToolResult('click', startTime, result as any, meta)
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -139,6 +203,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         async (args) => {
           const targetDescription = normalizeToolStringInput(args.targetDescription)
           const text = normalizeToolStringInput(args.text)
+          const startTime = Date.now()
+          logToolCall('fill', { targetDescription, text })
           writeDebug(options.debug, `mcp_tool=fill target=${targetDescription} text_len=${text.length}`)
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -149,6 +215,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             quality: DEFAULT_JPEG_QUALITY,
             action: () => fill({ page: options.page, targetDescription, text }),
           })
+
+          logToolResult('fill', startTime, result as any, meta)
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -165,6 +233,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           amount: z.number(),
         },
         async (args) => {
+          const startTime = Date.now()
+          logToolCall('scroll', { direction: args.direction, amount: args.amount })
           writeDebug(options.debug, `mcp_tool=scroll direction=${args.direction} amount=${args.amount}`)
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -175,6 +245,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             quality: DEFAULT_JPEG_QUALITY,
             action: () => scroll({ page: options.page, direction: args.direction, amount: args.amount }),
           })
+
+          logToolResult('scroll', startTime, result as any, meta)
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
@@ -190,6 +262,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           seconds: z.number(),
         },
         async (args) => {
+          const startTime = Date.now()
+          logToolCall('wait', { seconds: args.seconds })
           writeDebug(options.debug, `mcp_tool=wait seconds=${args.seconds}`)
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -200,6 +274,8 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             quality: DEFAULT_JPEG_QUALITY,
             action: () => wait({ page: options.page, seconds: args.seconds }),
           })
+
+          logToolResult('wait', startTime, result as any, meta)
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
