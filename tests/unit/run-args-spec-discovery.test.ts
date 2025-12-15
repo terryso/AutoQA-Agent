@@ -9,10 +9,17 @@ vi.mock('../../src/runner/run-specs.js', () => ({
   runSpecs: runSpecsMock,
 }))
 
+const probeAgentSdkAuthMock = vi.fn(async (): Promise<any> => ({ kind: 'available' }))
+vi.mock('../../src/auth/probe.js', () => ({
+  probeAgentSdkAuth: probeAgentSdkAuthMock,
+}))
+
 const validMarkdownSpec = `# Spec\n\n## Preconditions\n- ready\n\n## Steps\n1. Navigate to /\n`
 
 beforeEach(() => {
   runSpecsMock.mockClear()
+  probeAgentSdkAuthMock.mockClear()
+  delete (process.env as any).ANTHROPIC_API_KEY
 })
 
 describe('autoqa run (args & spec discovery)', () => {

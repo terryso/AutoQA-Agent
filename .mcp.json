@@ -1,13 +1,10 @@
 {
     "mcpServers": {
         "playwright-test": {
-            "args": [
-                "-y",
-                "playwright@latest",
-                "run-test-mcp-server"
-            ],
             "command": "npx",
-            "disabled": true
+            "args": [
+                "@playwright/mcp@latest"
+            ]
         }
     }
 }

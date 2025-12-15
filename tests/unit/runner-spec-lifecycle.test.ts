@@ -16,7 +16,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
 
     const browser = {
       version: vi.fn(() => 'chromium-mock'),
-      newContext: vi.fn(async () => {
+      newContext: vi.fn(async (_contextOptions?: any) => {
         const page = { close: vi.fn(async () => {}) }
         const context = {
           newPage: vi.fn(async () => page),
@@ -57,6 +57,15 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
     expect(createBrowserMock).toHaveBeenCalledTimes(1)
 
     expect(browser.newContext).toHaveBeenCalledTimes(2)
+    const newContextCalls = (browser.newContext as any).mock.calls as any[]
+    for (const call of newContextCalls) {
+      expect(call[0]).toMatchObject({
+        viewport: {
+          width: 1024,
+          height: 768,
+        },
+      })
+    }
     expect(contexts).toHaveLength(2)
     expect(contexts[0]).not.toBe(contexts[1])
 
@@ -87,7 +96,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
 
     const browser = {
       version: vi.fn(() => 'chromium-mock'),
-      newContext: vi.fn(async () => context),
+      newContext: vi.fn(async (_contextOptions?: any) => context),
       close: vi.fn(async () => {}),
     }
 
@@ -127,7 +136,7 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
 
     const browser = {
       version: vi.fn(() => 'chromium-mock'),
-      newContext: vi.fn(async () => ({
+      newContext: vi.fn(async (_contextOptions?: any) => ({
         newPage: vi.fn(async () => ({ close: vi.fn(async () => {}) })),
         close: vi.fn(async () => {}),
       })),

@@ -114,7 +114,12 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
 
       let context: BrowserContext | undefined
       try {
-        context = await browser.newContext()
+        context = await browser.newContext({
+          viewport: {
+            width: 1024,
+            height: 768,
+          },
+        })
       } catch (err: unknown) {
         throw setRunSpecsCode(err, 'CONTEXT_CREATE_FAILED')
       }

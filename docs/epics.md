@@ -22,6 +22,10 @@ FR4: 实现视觉感知循环（Visual Perception Loop）：在 Agent 调用任�
 FR5: 实现原生自愈机制（Native Self-Healing）：当底层 Playwright 工具抛出错误（如 TimeoutError、ElementNotFound）时，禁止直接中断程序；必须捕获错误并封装为 ToolResult（包含 `is_error: true`）返回给 Agent SDK，以触发下一轮推理并结合截图重试。
 FR6: 提供最小浏览器操作工具集（Playwright adapters）：`navigate(url)`、`click(target_description)`、`fill(target_description, text)`、`scroll(direction, amount)`、`wait(seconds)`；其中 `click/fill` 必须支持“语义描述”定位（例如“蓝色登录按钮”）。
 FR7: 提供断言工具：`assertTextPresent(text)`、`assertElementVisible(description)`；断言失败应同样触发自愈重试，多次失败后才标记测试不通过。
+FR8: 记录通过的动作轨迹（IR）：当 Agent 成功完成 `navigate/click/fill/scroll/wait` 等动作后，应记录动作与上下文到结构化 IR 产物中，以支持后续导出与复现。
+FR9: 稳定定位器沉淀：当 Agent 成功点击/填表某个元素时，系统应在运行时生成多种稳定 locator 候选，并通过无副作用验证筛选；只允许将验证通过的候选用于后续导出。
+FR10: 提供结构化页面表示：系统应支持获取页面的可访问性结构化快照（AX/ARIA snapshot），作为比截图更高效的页面理解输入，用于元素定位、自愈与调试。
+FR11: 提供可回放调试产物：系统应支持按 spec 录制 Playwright trace（含网络/DOM/操作时间线），并将 trace 作为运行产物落盘，便于失败复现与调试。
 
 ### NonFunctional Requirements
 
@@ -54,6 +58,10 @@ FR4: Epic 2 - 动作前截图并注入 turn
 FR5: Epic 3 - 工具失败/错误回流触发自愈重试（含护栏）
 FR6: Epic 2 - 浏览器操作工具集 `navigate/click/fill/scroll/wait`
 FR7: Epic 3 - 断言工具 + 断言失败自愈重试
+FR8: Epic 4 - 动作 IR 记录与导出
+FR9: Epic 4 - 运行时 locator 候选验证与沉淀
+FR10: Epic 2 - 结构化快照（AX/ARIA snapshot）
+FR11: Epic 2 - Playwright trace 录制与落盘
 
 ## Epic List
 
@@ -62,16 +70,16 @@ FR7: Epic 3 - 断言工具 + 断言失败自愈重试
 **FRs covered:** FR1
 
 ### Epic 2: 执行闭环（从 Markdown 驱动浏览器完成流程）
-用户完成该 Epic 后可以用 `autoqa run` 执行单个 spec 或目录（含 `--headless` / `--debug` / `--url`），Agent 能通过浏览器工具把流程跑起来；每次动作前自动截图并注入 turn；CLI 输出清晰的过程日志，便于本地与 CI 排障。
-**FRs covered:** FR2, FR3, FR4, FR6
+用户完成该 Epic 后可以用 `autoqa run` 执行单个 spec 或目录（含 `--headless` / `--debug` / `--url`），Agent 能通过浏览器工具把流程跑起来；每次动作前优先提供结构化快照（AX/ARIA snapshot）作为感知输入、必要时截图兜底；同时录制 trace 作为可回放产物；CLI 输出清晰的过程日志，便于本地与 CI 排障。
+**FRs covered:** FR2, FR3, FR4, FR6, FR10, FR11
 
 ### Epic 3: 验收判定与自愈闭环（断言 + 失败重试 + 护栏）
 用户完成该 Epic 后可以用断言工具自动判定通过/失败；当工具/断言失败时把错误 + 截图回流触发自愈重试；通过护栏避免无限循环与成本失控，保证 CI 结果稳定可控。
 **FRs covered:** FR5, FR7
 
-## Epic 1: 零配置上手（项目初始化）
-
-用户完成该 Epic 后可以运行 `autoqa init` 一键生成可运行的项目骨架与示例材料，并清楚如何完成鉴权（若本机已通过 Claude Code 授权则可直接使用 Agent SDK；否则配置 `ANTHROPIC_API_KEY`）。
+### Epic 4: 沉淀与导出（从自然语言执行到 Playwright Test）
+用户完成该 Epic 后可以在 `autoqa run` 跑通自然语言用例后，自动记录可复现的动作 IR（含稳定 locator 候选），并自动导出可在 CI 执行的 `@playwright/test` 用例文件到 `tests/autoqa/`。
+**FRs covered:** FR8, FR9
 
 ### Story 1.1: Set up initial project from starter template
   
@@ -259,6 +267,47 @@ FR7: Epic 3 - 断言工具 + 断言失败自愈重试
  **When** 发生工具调用或错误
  **Then** CLI 应输出包含 `runId/specPath/stepIndex/toolName` 等关键字段的日志
  **And** 日志应能区分用户输入/配置错误（退出码 `2`）与测试失败（退出码 `1`）
+
+### Story 2.8: 生成并落盘结构化页面快照（AX/ARIA snapshot）
+
+As a QA 工程师,
+I want 在 spec 执行过程中按需生成结构化页面快照（AX/ARIA snapshot）并落盘归档，
+so that 我可以用更低成本的结构化信息辅助定位/自愈与排障。
+
+**FRs covered:** FR10
+
+ Tech Spec: `docs/sprint-artifacts/ts-2-8-2-9-ax-aria-snapshot-playwright-trace.md`
+
+**Acceptance Criteria:**
+
+**Given** 正在执行某个 spec
+**When** 系统采集结构化快照
+**Then** 应产出可读的文本表示（例如 YAML/等价格式）并与本次 run 绑定落盘（例如归档到 `.autoqa/<runId>/snapshots/`）
+
+**Given** 工具执行失败或发生多次重试
+**When** `autoqa run` 输出失败上下文
+**Then** CLI 应输出结构化快照产物路径，便于快速定位页面结构变化
+
+### Story 2.9: Runner 按 spec 生命周期录制 Playwright trace 并保留
+
+As a 开发者,
+I want Runner 在 spec 生命周期内录制 Playwright trace 并将其作为运行产物保留，
+so that 我可以回放整个执行过程来复现与定位问题，并提升导出与自愈阶段的可调试性。
+
+**FRs covered:** FR11
+
+ Tech Spec: `docs/sprint-artifacts/ts-2-8-2-9-ax-aria-snapshot-playwright-trace.md`
+
+**Acceptance Criteria:**
+
+**Given** Runner 开始执行一个 spec
+**When** 启用 trace 录制
+**Then** 应在 spec 生命周期内开始/停止 trace，并生成 trace 产物文件与本次 run 绑定落盘（例如 `.autoqa/<runId>/traces/<specName>.zip`）
+
+**Given** spec 执行结束
+**When** `autoqa run` 输出汇总
+**Then** CLI 应输出 trace 产物路径（若生成成功）
+**And** trace 产物应可用 Playwright Trace Viewer 打开进行回放
  
 ## Epic 3: 验收判定与自愈闭环（断言 + 失败重试 + 护栏）
  
@@ -332,3 +381,60 @@ FR7: Epic 3 - 断言工具 + 断言失败自愈重试
  **When** `autoqa run` 结束
  **Then** 进程应以退出码 `1` 结束并输出失败汇总
  **And** 至少保留与失败相关的截图/日志信息（持久化策略可默认仅失败/调试模式）
+
+## Epic 4: 沉淀与导出（从自然语言执行到 Playwright Test）
+
+用户完成该 Epic 后可以在 `autoqa run` 跑通自然语言用例后，自动记录可复现的动作 IR（含稳定 locator 候选），并自动导出可在 CI 执行的 `@playwright/test` 用例文件到 `tests/autoqa/`。
+
+### Story 4.1: 运行时生成并验证 locator 候选，并写入动作 IR
+
+As a QA 工程师,
+I want 在 Agent 成功完成 click/fill 等动作后自动生成并验证稳定 locator 候选，并把结果记录到结构化动作 IR 中，
+so that 后续可以稳定导出可维护的 Playwright 测试代码，而不是依赖一次性会话内的 `ref`。
+
+**FRs covered:** FR8, FR9
+
+ Tech Spec: `docs/sprint-artifacts/ts-4-1-4-2-runtime-locator-validation-ir-auto-export-playwright-test.md`
+
+**Acceptance Criteria:**
+
+**Given** Agent 通过工具成功执行一次 `click(target_description)` 或 `fill(target_description, text)`
+**When** 工具返回 `ok: true`
+**Then** 系统必须为“实际命中的元素”生成多种 locator 候选（优先稳定定位方式，如 testId/role/label/placeholder/id 等）
+**And** 对每个候选进行无副作用验证（至少包含唯一性与可用性校验）
+**And** 仅将验证通过的候选写入动作 IR（按优先级排序）
+
+**Given** 某个 locator 候选验证失败
+**When** 系统筛选候选池
+**Then** 该候选不得被写入 IR
+**And** 不得因此中断 spec 执行（只记录验证失败摘要用于调试）
+
+**Given** 任一动作被记录到 IR
+**When** spec 执行结束
+**Then** IR 产物应与本次 run 绑定（例如按 `runId` 归档），并可用于后续导出与回放
+
+### Story 4.2: `autoqa run` 结束后自动导出 `@playwright/test` 用例到 `tests/autoqa/`
+
+As a QA 工程师,
+I want 在 `autoqa run` 成功跑通用例后自动导出可运行的 `@playwright/test` `.spec.ts` 文件到 `tests/autoqa/`，
+so that 我可以把通过的用例沉淀为稳定的回归测试并接入 CI。
+
+**FRs covered:** FR8
+
+ Tech Spec: `docs/sprint-artifacts/ts-4-1-4-2-runtime-locator-validation-ir-auto-export-playwright-test.md`
+
+**Acceptance Criteria:**
+
+**Given** `autoqa run` 完成执行且至少产生一条动作 IR（包含通过验证的 locator 候选）
+**When** Runner 结束本次 spec
+**Then** 系统应自动在 `tests/autoqa/` 生成对应的 `@playwright/test` 文件（按 spec 文件名或等效规则命名）
+
+**Given** spec 中包含断言步骤
+**When** 生成 `@playwright/test` 代码
+**Then** 生成的 `expect(...)` 断言必须仅来源于 spec 的断言步骤
+**And** 禁止从运行时观察/页面内容“自动发明”断言
+
+**Given** 导出的测试文件被执行
+**When** 使用 Playwright Test 运行该文件
+**Then** 测试应不依赖 Agent、不依赖会话内 `ref`，仅依赖导出的稳定 locator 与显式断言
+

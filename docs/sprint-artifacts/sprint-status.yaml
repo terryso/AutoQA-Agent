@@ -1,4 +1,4 @@
-# generated: 2025-12-13T21:41:00+08:00
+# generated: 2025-12-15T21:54:43+08:00
 # project: AutoQA-Agent
 # project_key: autoqa-agent
 # tracking_system: file-system
@@ -34,7 +34,7 @@
 # - SM typically drafts next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2025-12-13T21:41:00+08:00
+generated: 2025-12-15T21:54:43+08:00
 project: AutoQA-Agent
 project_key: autoqa-agent
 tracking_system: file-system
@@ -54,8 +54,10 @@ development_status:
   2-3-parse-markdown-spec-preconditions-steps-assertions: done
   2-4-runner-spec-lifecycle-browser-context-page: done
   2-5-playwright-action-tools-toolresult: done
-  2-6-pre-action-screenshot-inject-turn-compress: backlog
+  2-6-pre-action-screenshot-inject-turn-compress: done
   2-7-logging-observability-structured: backlog
+  2-8-ax-aria-snapshot: backlog
+  2-9-playwright-trace-recording-retention: backlog
   epic-2-retrospective: optional
 
   epic-3: backlog
@@ -64,3 +66,8 @@ development_status:
   3-3-self-heal-guardrails-max-tool-calls-errors-retries: backlog
   3-4-failure-artifacts-exit-codes-ci: backlog
   epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-runtime-locator-validation-ir: backlog
+  4-2-auto-export-playwright-test: backlog
+  epic-4-retrospective: optional

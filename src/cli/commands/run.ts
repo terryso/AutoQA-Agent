@@ -13,6 +13,8 @@ import { validateRunArgs } from '../../runner/validate-run-args.js'
 import { runSpecs } from '../../runner/run-specs.js'
 import { parseMarkdownSpec } from '../../markdown/parse-markdown-spec.js'
 import type { MarkdownSpec } from '../../markdown/spec-types.js'
+import { runAgent } from '../../agent/run-agent.js'
+import { probeAgentSdkAuth, type AgentSdkAuthProbeResult } from '../../auth/probe.js'
 
 function sanitizeBaseUrlForLog(baseUrl: string): string {
   try {
@@ -21,6 +23,11 @@ function sanitizeBaseUrlForLog(baseUrl: string): string {
   } catch {
     return baseUrl
   }
+}
+
+function hasAnthropicApiKey(): boolean {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  return typeof apiKey === 'string' && apiKey.length > 0
 }
 
 export function registerRunCommand(program: Command) {
@@ -124,12 +131,44 @@ export function registerRunCommand(program: Command) {
         }
       }
 
+      if (!hasAnthropicApiKey()) {
+        let probeResult: AgentSdkAuthProbeResult
+        try {
+          probeResult = await probeAgentSdkAuth()
+        } catch {
+          probeResult = { kind: 'unknown' }
+        }
+
+        if (validated.value.debug) {
+          writeOutLine(writeErr, `auth=${probeResult.kind}`)
+        }
+
+        if (probeResult.kind === 'authentication_failed') {
+          program.error(
+            '未检测到 Claude Code 授权，且未设置 ANTHROPIC_API_KEY。请先完成 Claude Code 本地授权或设置 ANTHROPIC_API_KEY。',
+            { exitCode: 2 },
+          )
+          return
+        }
+      }
+
       const runResult = await runSpecs({
         runId,
         baseUrl: validated.value.baseUrl,
         headless: validated.value.headless,
         debug: validated.value.debug,
         specs: parsedSpecs,
+        onSpec: async ({ runId, baseUrl, specPath, spec, page }) => {
+          await runAgent({
+            runId,
+            baseUrl,
+            debug: validated.value.debug,
+            specPath,
+            spec,
+            page,
+            cwd: process.cwd(),
+          })
+        },
       })
 
       if (!runResult.ok) {
