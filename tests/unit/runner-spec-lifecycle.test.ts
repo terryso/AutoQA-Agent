@@ -71,8 +71,8 @@ describe('runner/runSpecs (browser/context/page lifecycle)', () => {
     for (const call of newContextCalls) {
       expect(call[0]).toMatchObject({
         viewport: {
-          width: 1024,
-          height: 768,
+          width: 1440,
+          height: 900,
         },
       })
     }

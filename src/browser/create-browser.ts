@@ -6,5 +6,10 @@ export type CreateBrowserOptions = {
 }
 
 export async function createBrowser(options: CreateBrowserOptions): Promise<Browser> {
-  return chromium.launch({ headless: options.headless, slowMo: options.slowMo })
+  const args = options.headless ? ['--window-size=1440,900'] : ['--start-maximized']
+  return chromium.launch({
+    headless: options.headless,
+    slowMo: options.slowMo,
+    args,
+  })
 }

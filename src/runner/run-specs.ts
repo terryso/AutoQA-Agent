@@ -185,12 +185,18 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
 
       let context: BrowserContext | undefined
       try {
-        context = await browser.newContext({
-          viewport: {
-            width: 1024,
-            height: 768,
-          },
-        })
+        context = await browser.newContext(
+          options.debug
+            ? {
+              viewport: null,
+            }
+            : {
+              viewport: {
+                width: 1440,
+                height: 900,
+              },
+            },
+        )
       } catch (err: unknown) {
         specsFailed++
         logger.log({

@@ -4,6 +4,47 @@ import type { ToolResult } from './tool-result.js'
 import { fail, ok } from './tool-result.js'
 import { toToolError } from './playwright-error.js'
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+const STOP_WORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'with',
+  'for',
+  'to',
+  'in',
+  'on',
+  'of',
+  'and',
+  'or',
+  'button',
+  'link',
+  'element',
+  'item',
+])
+
+function normalizeForNameMatch(value: string): string {
+  const tokens = value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && !STOP_WORDS.has(t))
+  return tokens.join(' ')
+}
+
+function buildFuzzyRegex(value: string): RegExp | undefined {
+  const normalized = normalizeForNameMatch(value)
+  if (!normalized) return undefined
+  const tokens = normalized.split(/\s+/g).filter((t) => t.length > 0)
+  if (tokens.length <= 0) return undefined
+  if (tokens.length === 1) return new RegExp(escapeRegExp(tokens[0]!), 'i')
+  const lookaheads = tokens.map((t) => `(?=.*${escapeRegExp(t)})`).join('')
+  return new RegExp(`${lookaheads}.*`, 'i')
+}
+
 export type ClickInput = {
   page: Page
   targetDescription: string
@@ -46,6 +87,21 @@ async function resolveClickTarget(page: Page, targetDescription: string): Promis
   try {
     candidates.push(page.getByText(targetDescription))
   } catch {}
+
+  const fuzzy = buildFuzzyRegex(targetDescription)
+  if (fuzzy) {
+    try {
+      candidates.push(page.getByRole('button', { name: fuzzy }))
+    } catch {}
+
+    try {
+      candidates.push(page.getByRole('link', { name: fuzzy }))
+    } catch {}
+
+    try {
+      candidates.push(page.getByText(fuzzy))
+    } catch {}
+  }
 
   for (const candidate of candidates) {
     const picked = await pickFirstMatch(candidate)

@@ -10,6 +10,29 @@ import type { Logger } from '../logging/index.js'
 import { redactToolInput, sanitizeRelativePath } from '../logging/index.js'
 import { captureSnapshots, writeSnapshotsIfNeeded, type SnapshotMeta } from '../browser/snapshot.js'
 
+type ArtifactMode = 'all' | 'fail' | 'none'
+type ToolContextMode = 'screenshot' | 'snapshot' | 'none'
+
+function getArtifactMode(): ArtifactMode | undefined {
+  const raw = (process.env.AUTOQA_ARTIFACTS ?? '').trim().toLowerCase()
+  if (raw === 'all' || raw === 'fail' || raw === 'none') return raw
+  return undefined
+}
+
+function shouldWriteArtifacts(debug: boolean, toolOk: boolean): boolean {
+  const mode = getArtifactMode()
+  if (mode === 'all') return true
+  if (mode === 'none') return false
+  if (mode === 'fail') return !toolOk
+  return !toolOk
+}
+
+function getToolContextMode(): ToolContextMode {
+  const raw = (process.env.AUTOQA_TOOL_CONTEXT ?? '').trim().toLowerCase()
+  if (raw === 'screenshot' || raw === 'snapshot' || raw === 'none') return raw
+  return 'screenshot'
+}
+
 function normalizeToolStringInput(value: string): string {
   const s = (value ?? '').trim()
   if (s.length >= 2 && s.startsWith('`') && s.endsWith('`')) {
@@ -167,13 +190,14 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           url: z.string(),
         },
         async (args) => {
+          const contextMode = getToolContextMode()
           const url = normalizeToolStringInput(args.url)
           const fileBaseName = nextFileBaseName('navigate')
           const startTime = Date.now()
           logToolCall('navigate', { url })
           writeDebug(options.debug, `mcp_tool=navigate url=${url}`)
 
-          const snapshotCapturePromise = capturePreActionSnapshot()
+          const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -189,11 +213,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           })
 
           const snapshotCapture = await snapshotCapturePromise
-          const snapshotMeta = await writeSnapshotsIfNeeded(
-            snapshotCapture,
-            { cwd: options.cwd, runId: options.runId, fileBaseName },
-            Boolean(options.debug || !result.ok),
-          )
+          const snapshotMeta = snapshotCapture
+            ? await writeSnapshotsIfNeeded(
+              snapshotCapture,
+              { cwd: options.cwd, runId: options.runId, fileBaseName },
+              shouldWriteArtifacts(options.debug, Boolean(result.ok)),
+            )
+            : ({ captured: false } as SnapshotMeta)
 
           logToolResult('navigate', startTime, result as any, { ...meta, snapshot: snapshotMeta })
 
@@ -212,13 +238,14 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           targetDescription: z.string(),
         },
         async (args) => {
+          const contextMode = getToolContextMode()
           const targetDescription = normalizeToolStringInput(args.targetDescription)
           const fileBaseName = nextFileBaseName('click')
           const startTime = Date.now()
           logToolCall('click', { targetDescription })
           writeDebug(options.debug, `mcp_tool=click target=${targetDescription}`)
 
-          const snapshotCapturePromise = capturePreActionSnapshot()
+          const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -234,11 +261,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           })
 
           const snapshotCapture = await snapshotCapturePromise
-          const snapshotMeta = await writeSnapshotsIfNeeded(
-            snapshotCapture,
-            { cwd: options.cwd, runId: options.runId, fileBaseName },
-            Boolean(options.debug || !result.ok),
-          )
+          const snapshotMeta = snapshotCapture
+            ? await writeSnapshotsIfNeeded(
+              snapshotCapture,
+              { cwd: options.cwd, runId: options.runId, fileBaseName },
+              shouldWriteArtifacts(options.debug, Boolean(result.ok)),
+            )
+            : ({ captured: false } as SnapshotMeta)
 
           logToolResult('click', startTime, result as any, { ...meta, snapshot: snapshotMeta })
 
@@ -258,6 +287,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           text: z.string(),
         },
         async (args) => {
+          const contextMode = getToolContextMode()
           const targetDescription = normalizeToolStringInput(args.targetDescription)
           const text = normalizeToolStringInput(args.text)
           const fileBaseName = nextFileBaseName('fill')
@@ -265,7 +295,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           logToolCall('fill', { targetDescription, text })
           writeDebug(options.debug, `mcp_tool=fill target=${targetDescription} text_len=${text.length}`)
 
-          const snapshotCapturePromise = capturePreActionSnapshot()
+          const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -281,11 +311,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           })
 
           const snapshotCapture = await snapshotCapturePromise
-          const snapshotMeta = await writeSnapshotsIfNeeded(
-            snapshotCapture,
-            { cwd: options.cwd, runId: options.runId, fileBaseName },
-            Boolean(options.debug || !result.ok),
-          )
+          const snapshotMeta = snapshotCapture
+            ? await writeSnapshotsIfNeeded(
+              snapshotCapture,
+              { cwd: options.cwd, runId: options.runId, fileBaseName },
+              shouldWriteArtifacts(options.debug, Boolean(result.ok)),
+            )
+            : ({ captured: false } as SnapshotMeta)
 
           logToolResult('fill', startTime, result as any, { ...meta, snapshot: snapshotMeta })
 
@@ -305,12 +337,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           amount: z.number(),
         },
         async (args) => {
+          const contextMode = getToolContextMode()
           const fileBaseName = nextFileBaseName('scroll')
           const startTime = Date.now()
           logToolCall('scroll', { direction: args.direction, amount: args.amount })
           writeDebug(options.debug, `mcp_tool=scroll direction=${args.direction} amount=${args.amount}`)
 
-          const snapshotCapturePromise = capturePreActionSnapshot()
+          const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -326,11 +359,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           })
 
           const snapshotCapture = await snapshotCapturePromise
-          const snapshotMeta = await writeSnapshotsIfNeeded(
-            snapshotCapture,
-            { cwd: options.cwd, runId: options.runId, fileBaseName },
-            Boolean(options.debug || !result.ok),
-          )
+          const snapshotMeta = snapshotCapture
+            ? await writeSnapshotsIfNeeded(
+              snapshotCapture,
+              { cwd: options.cwd, runId: options.runId, fileBaseName },
+              shouldWriteArtifacts(options.debug, Boolean(result.ok)),
+            )
+            : ({ captured: false } as SnapshotMeta)
 
           logToolResult('scroll', startTime, result as any, { ...meta, snapshot: snapshotMeta })
 
@@ -349,12 +384,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           seconds: z.number(),
         },
         async (args) => {
+          const contextMode = getToolContextMode()
           const fileBaseName = nextFileBaseName('wait')
           const startTime = Date.now()
           logToolCall('wait', { seconds: args.seconds })
           writeDebug(options.debug, `mcp_tool=wait seconds=${args.seconds}`)
 
-          const snapshotCapturePromise = capturePreActionSnapshot()
+          const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
           const { result, meta } = await runWithPreActionScreenshot({
             page: options.page,
@@ -370,11 +406,13 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           })
 
           const snapshotCapture = await snapshotCapturePromise
-          const snapshotMeta = await writeSnapshotsIfNeeded(
-            snapshotCapture,
-            { cwd: options.cwd, runId: options.runId, fileBaseName },
-            Boolean(options.debug || !result.ok),
-          )
+          const snapshotMeta = snapshotCapture
+            ? await writeSnapshotsIfNeeded(
+              snapshotCapture,
+              { cwd: options.cwd, runId: options.runId, fileBaseName },
+              shouldWriteArtifacts(options.debug, Boolean(result.ok)),
+            )
+            : ({ captured: false } as SnapshotMeta)
 
           logToolResult('wait', startTime, result as any, { ...meta, snapshot: snapshotMeta })
 

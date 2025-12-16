@@ -37,6 +37,36 @@ export type RunWithPreActionScreenshotOptions<TData> = {
   writeScreenshot?: (options: WriteScreenshotOptions) => Promise<string>
 }
 
+type ArtifactMode = 'all' | 'fail' | 'none'
+type ToolContextMode = 'screenshot' | 'snapshot' | 'none'
+type ScreenshotTiming = 'pre' | 'post'
+
+function getArtifactMode(): ArtifactMode | undefined {
+  const raw = (process.env.AUTOQA_ARTIFACTS ?? '').trim().toLowerCase()
+  if (raw === 'all' || raw === 'fail' || raw === 'none') return raw
+  return undefined
+}
+
+function shouldWriteArtifacts(debug: boolean, toolOk: boolean): boolean {
+  const mode = getArtifactMode()
+  if (mode === 'all') return true
+  if (mode === 'none') return false
+  if (mode === 'fail') return !toolOk
+  return !toolOk
+}
+
+function getToolContextMode(): ToolContextMode {
+  const raw = (process.env.AUTOQA_TOOL_CONTEXT ?? '').trim().toLowerCase()
+  if (raw === 'screenshot' || raw === 'snapshot' || raw === 'none') return raw
+  return 'screenshot'
+}
+
+function getScreenshotTiming(): ScreenshotTiming {
+  const raw = (process.env.AUTOQA_SCREENSHOT_TIMING ?? '').trim().toLowerCase()
+  if (raw === 'pre' || raw === 'post') return raw
+  return 'pre'
+}
+
 function attachScreenshot<TData>(result: ToolResult<TData>, screenshot: ToolScreenshot | undefined): ToolResult<TData> {
   if (!screenshot) return result
   return result.ok
@@ -47,14 +77,33 @@ function attachScreenshot<TData>(result: ToolResult<TData>, screenshot: ToolScre
 export async function runWithPreActionScreenshot<TData>(
   options: RunWithPreActionScreenshotOptions<TData>,
 ): Promise<{ result: ToolResult<TData>; meta: PreActionScreenshotMeta }> {
-  const capture = await captureJpegScreenshot(options.page, { quality: options.quality })
+  const contextMode = getToolContextMode()
+  const timing = getScreenshotTiming()
+
+  const captureBefore = async () => {
+    return contextMode === 'screenshot'
+      ? await captureJpegScreenshot(options.page, { quality: options.quality })
+      : { ok: false as const, message: 'Screenshot capture disabled by AUTOQA_TOOL_CONTEXT' }
+  }
+
+  const captureAfter = async () => {
+    return contextMode === 'screenshot'
+      ? await captureJpegScreenshot(options.page, { quality: options.quality })
+      : { ok: false as const, message: 'Screenshot capture disabled by AUTOQA_TOOL_CONTEXT' }
+  }
+
+  const capture = timing === 'pre' ? await captureBefore() : undefined
+
+  const toolResult = await options.action()
+
+  const finalCapture = timing === 'post' ? await captureAfter() : capture
 
   let screenshot: ToolScreenshot | undefined
   let imageBlock: ImageContentBlock | undefined
   let error: string | undefined
 
-  if (capture.ok) {
-    const base64 = capture.value.buffer.toString('base64')
+  if (finalCapture?.ok) {
+    const base64 = finalCapture.value.buffer.toString('base64')
     imageBlock = {
       type: 'image',
       source: {
@@ -65,26 +114,24 @@ export async function runWithPreActionScreenshot<TData>(
     }
 
     screenshot = {
-      mimeType: capture.value.mimeType,
-      width: capture.value.width,
-      height: capture.value.height,
+      mimeType: finalCapture.value.mimeType,
+      width: finalCapture.value.width,
+      height: finalCapture.value.height,
     }
-  } else {
-    error = capture.message
+  } else if (contextMode === 'screenshot' && finalCapture && !finalCapture.ok) {
+    error = finalCapture.message
   }
 
-  const toolResult = await options.action()
+  const shouldWrite = Boolean(finalCapture?.ok && shouldWriteArtifacts(options.debug, toolResult.ok))
 
-  const shouldWrite = Boolean(capture.ok && (options.debug || !toolResult.ok))
-
-  if (shouldWrite && capture.ok) {
+  if (shouldWrite && finalCapture?.ok) {
     const writeFn = options.writeScreenshot ?? writeRunScreenshot
     try {
       const path = await writeFn({
         cwd: options.cwd,
         runId: options.runId,
         fileBaseName: options.fileBaseName,
-        buffer: capture.value.buffer,
+        buffer: finalCapture.value.buffer,
       })
       screenshot = screenshot ? { ...screenshot, path } : { mimeType: 'image/jpeg', path }
     } catch (err: unknown) {
@@ -96,7 +143,7 @@ export async function runWithPreActionScreenshot<TData>(
   return {
     result: attachScreenshot(toolResult, screenshot),
     meta: {
-      captured: capture.ok,
+      captured: Boolean(finalCapture?.ok),
       error,
       screenshot,
       imageBlock,

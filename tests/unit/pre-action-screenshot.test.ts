@@ -72,6 +72,8 @@ describe('pre-action screenshot', () => {
   })
 
   it('writes screenshot when debug=true', async () => {
+    const prevMode = process.env.AUTOQA_ARTIFACTS
+    process.env.AUTOQA_ARTIFACTS = 'all'
     const buffer = Buffer.from('jpeg-bytes')
 
     const page: any = {
@@ -82,23 +84,33 @@ describe('pre-action screenshot', () => {
     const action = vi.fn(async () => ({ ok: true as const, data: { ok: 1 } }))
     const writeScreenshot = vi.fn(async () => '/tmp/screenshot.jpg')
 
-    const out = await runWithPreActionScreenshot({
-      page,
-      runId: 'run-1',
-      debug: true,
-      fileBaseName: 'fill-1',
-      action,
-      writeScreenshot,
-    })
+    try {
+      const out = await runWithPreActionScreenshot({
+        page,
+        runId: 'run-1',
+        debug: true,
+        fileBaseName: 'fill-1',
+        action,
+        writeScreenshot,
+      })
 
-    expect(writeScreenshot).toHaveBeenCalledTimes(1)
-    expect(out.result.ok).toBe(true)
-    if (out.result.ok) {
-      expect(out.result.screenshot?.path).toBe('/tmp/screenshot.jpg')
+      expect(writeScreenshot).toHaveBeenCalledTimes(1)
+      expect(out.result.ok).toBe(true)
+      if (out.result.ok) {
+        expect(out.result.screenshot?.path).toBe('/tmp/screenshot.jpg')
+      }
+    } finally {
+      if (prevMode === undefined) {
+        delete process.env.AUTOQA_ARTIFACTS
+      } else {
+        process.env.AUTOQA_ARTIFACTS = prevMode
+      }
     }
   })
 
   it('does not throw when screenshot write fails; tool action still returns', async () => {
+    const prevMode = process.env.AUTOQA_ARTIFACTS
+    process.env.AUTOQA_ARTIFACTS = 'all'
     const buffer = Buffer.from('jpeg-bytes')
 
     const page: any = {
@@ -111,28 +123,36 @@ describe('pre-action screenshot', () => {
       throw new Error('disk full')
     })
 
-    const out = await runWithPreActionScreenshot({
-      page,
-      runId: 'run-1',
-      debug: true,
-      fileBaseName: 'navigate-2',
-      action,
-      writeScreenshot,
-    })
-
-    expect(action).toHaveBeenCalledTimes(1)
-    expect(writeScreenshot).toHaveBeenCalledTimes(1)
-
-    expect(out.meta.captured).toBe(true)
-    expect(out.meta.error).toContain('Failed to write screenshot')
-    expect(out.result.ok).toBe(true)
-    if (out.result.ok) {
-      expect(out.result.screenshot?.path).toBeUndefined()
-      expect(out.result.screenshot).toMatchObject({
-        mimeType: 'image/jpeg',
-        width: 1024,
-        height: 768,
+    try {
+      const out = await runWithPreActionScreenshot({
+        page,
+        runId: 'run-1',
+        debug: true,
+        fileBaseName: 'navigate-2',
+        action,
+        writeScreenshot,
       })
+
+      expect(action).toHaveBeenCalledTimes(1)
+      expect(writeScreenshot).toHaveBeenCalledTimes(1)
+
+      expect(out.meta.captured).toBe(true)
+      expect(out.meta.error).toContain('Failed to write screenshot')
+      expect(out.result.ok).toBe(true)
+      if (out.result.ok) {
+        expect(out.result.screenshot?.path).toBeUndefined()
+        expect(out.result.screenshot).toMatchObject({
+          mimeType: 'image/jpeg',
+          width: 1024,
+          height: 768,
+        })
+      }
+    } finally {
+      if (prevMode === undefined) {
+        delete process.env.AUTOQA_ARTIFACTS
+      } else {
+        process.env.AUTOQA_ARTIFACTS = prevMode
+      }
     }
   })
 
