@@ -9,7 +9,7 @@ description: "Summarize sprint-status.yaml, surface risks, and route to the righ
 author: "BMad"
 
 # Critical variables from config
-config_source: "{project-root}/.bmad/bmm/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 output_folder: "{config_source}:output_folder"
 user_name: "{config_source}:user_name"
 communication_language: "{config_source}:communication_language"
@@ -18,7 +18,7 @@ date: system-generated
 sprint_artifacts: "{config_source}:sprint_artifacts"
 
 # Workflow components
-installed_path: "{project-root}/.bmad/bmm/workflows/4-implementation/sprint-status"
+installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/sprint-status"
 instructions: "{installed_path}/instructions.md"
 
 # Inputs

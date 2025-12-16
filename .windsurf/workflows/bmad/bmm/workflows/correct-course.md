@@ -8,7 +8,7 @@ name: "correct-course"
 description: "Navigate significant changes during sprint execution by analyzing impact, proposing solutions, and routing for implementation"
 author: "BMad Method"
 
-config_source: "{project-root}/.bmad/bmm/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 output_folder: "{config_source}:output_folder"
 user_name: "{config_source}:user_name"
 communication_language: "{config_source}:communication_language"
@@ -51,7 +51,7 @@ input_file_patterns:
     sharded: "{output_folder}/index.md"
     load_strategy: "INDEX_GUIDED"
 
-installed_path: "{project-root}/.bmad/bmm/workflows/4-implementation/correct-course"
+installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/correct-course"
 template: false
 instructions: "{installed_path}/instructions.md"
 validation: "{installed_path}/checklist.md"

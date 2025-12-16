@@ -8,7 +8,7 @@ description: "Execute a story by implementing tasks/subtasks, writing tests, val
 author: "BMad"
 
 # Critical variables from config
-config_source: "{project-root}/.bmad/bmm/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 output_folder: "{config_source}:output_folder"
 user_name: "{config_source}:user_name"
 communication_language: "{config_source}:communication_language"
@@ -18,7 +18,7 @@ story_dir: "{config_source}:sprint_artifacts"
 date: system-generated
 
 # Workflow components
-installed_path: "{project-root}/.bmad/bmm/workflows/4-implementation/dev-story"
+installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/dev-story"
 instructions: "{installed_path}/instructions.xml"
 validation: "{installed_path}/checklist.md"
 

@@ -9,7 +9,7 @@ description: "Flexible development - execute tech-specs OR direct instructions w
 author: "BMad"
 
 # Config
-config_source: "{project-root}/.bmad/bmm/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 output_folder: "{config_source}:output_folder"
 sprint_artifacts: "{config_source}:sprint_artifacts"
 user_name: "{config_source}:user_name"
@@ -21,17 +21,17 @@ date: system-generated
 project_context: "**/project-context.md"
 
 # Workflow components
-installed_path: "{project-root}/.bmad/bmm/workflows/bmad-quick-flow/quick-dev"
+installed_path: "{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev"
 instructions: "{installed_path}/instructions.md"
 checklist: "{installed_path}/checklist.md"
 
 # Related workflows
-create_tech_spec_workflow: "{project-root}/.bmad/bmm/workflows/bmad-quick-flow/create-tech-spec/workflow.yaml"
-party_mode_exec: "{project-root}/.bmad/core/workflows/party-mode/workflow.md"
-advanced_elicitation: "{project-root}/.bmad/core/tasks/advanced-elicitation.xml"
+create_tech_spec_workflow: "{project-root}/_bmad/bmm/workflows/bmad-quick-flow/create-tech-spec/workflow.yaml"
+party_mode_exec: "{project-root}/_bmad/core/workflows/party-mode/workflow.md"
+advanced_elicitation: "{project-root}/_bmad/core/tasks/advanced-elicitation.xml"
 
 # Routing resources (lazy-loaded)
-project_levels: "{project-root}/.bmad/bmm/workflows/workflow-status/project-levels.yaml"
-workflow_init: "{project-root}/.bmad/bmm/workflows/workflow-status/init/workflow.yaml"
+project_levels: "{project-root}/_bmad/bmm/workflows/workflow-status/project-levels.yaml"
+workflow_init: "{project-root}/_bmad/bmm/workflows/workflow-status/init/workflow.yaml"
 
 standalone: true

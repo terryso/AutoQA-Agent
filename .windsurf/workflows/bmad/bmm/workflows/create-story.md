@@ -8,7 +8,7 @@ description: "Create the next user story from epics+stories with enhanced contex
 author: "BMad"
 
 # Critical variables from config
-config_source: "{project-root}/.bmad/bmm/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 output_folder: "{config_source}:output_folder"
 user_name: "{config_source}:user_name"
 communication_language: "{config_source}:communication_language"
@@ -17,7 +17,7 @@ sprint_artifacts: "{config_source}:sprint_artifacts"
 story_dir: "{sprint_artifacts}"
 
 # Workflow components
-installed_path: "{project-root}/.bmad/bmm/workflows/4-implementation/create-story"
+installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/create-story"
 template: "{installed_path}/template.md"
 instructions: "{installed_path}/instructions.xml"
 validation: "{installed_path}/checklist.md"

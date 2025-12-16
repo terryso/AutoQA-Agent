@@ -3,9 +3,9 @@ description: task-advanced-elicitation
 auto_execution_mode: 2
 ---
 
-<task id=".bmad/core/tasks/advanced-elicitation.xml" name="Advanced Elicitation" standalone="true"
-  methods="{project-root}/.bmad/core/tasks/advanced-elicitation-methods.csv"
-  agent-party="{project-root}/.bmad/_cfg/agent-manifest.csv">
+<task id="_bmad/core/tasks/advanced-elicitation.xml" name="Advanced Elicitation" standalone="true"
+  methods="{project-root}/_bmad/core/tasks/advanced-elicitation-methods.csv"
+  agent-party="{project-root}/_bmad/_config/agent-manifest.csv">
   <llm critical="true">
     <i>MANDATORY: Execute ALL steps in the flow section IN EXACT ORDER</i>
     <i>DO NOT skip steps or change the sequence</i>

@@ -9,7 +9,7 @@ description: "Initialize a new BMM project by determining level, type, and creat
 author: "BMad"
 
 # Critical variables from config
-config_source: "{project-root}/.bmad/bmm/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 output_folder: "{config_source}:output_folder"
 sprint_artifacts: "{config_source}:sprint_artifacts"
 user_name: "{config_source}:user_name"
@@ -20,12 +20,12 @@ user_skill_level: "{config_source}:user_skill_level"
 date: system-generated
 
 # Workflow components
-installed_path: "{project-root}/.bmad/bmm/workflows/workflow-status/init"
+installed_path: "{project-root}/_bmad/bmm/workflows/workflow-status/init"
 instructions: "{installed_path}/instructions.md"
-template: "{project-root}/.bmad/bmm/workflows/workflow-status/workflow-status-template.yaml"
+template: "{project-root}/_bmad/bmm/workflows/workflow-status/workflow-status-template.yaml"
 
 # Path data files
-path_files: "{project-root}/.bmad/bmm/workflows/workflow-status/paths/"
+path_files: "{project-root}/_bmad/bmm/workflows/workflow-status/paths/"
 
 # Output configuration
 default_output_file: "{output_folder}/bmm-workflow-status.yaml"

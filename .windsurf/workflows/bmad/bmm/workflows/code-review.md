@@ -9,7 +9,7 @@ description: "Perform an ADVERSARIAL Senior Developer code review that finds 3-1
 author: "BMad"
 
 # Critical variables from config
-config_source: "{project-root}/.bmad/bmm/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 output_folder: "{config_source}:output_folder"
 user_name: "{config_source}:user_name"
 communication_language: "{config_source}:communication_language"
@@ -20,7 +20,7 @@ sprint_artifacts: "{config_source}:sprint_artifacts"
 sprint_status: "{sprint_artifacts}/sprint-status.yaml || {output_folder}/sprint-status.yaml"
 
 # Workflow components
-installed_path: "{project-root}/.bmad/bmm/workflows/4-implementation/code-review"
+installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/code-review"
 instructions: "{installed_path}/instructions.xml"
 validation: "{installed_path}/checklist.md"
 template: false

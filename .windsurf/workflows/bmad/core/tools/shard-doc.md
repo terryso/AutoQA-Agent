@@ -3,7 +3,7 @@ description: tool-shard-doc
 auto_execution_mode: 2
 ---
 
-<tool id=".bmad/core/tasks/shard-doc" name="Shard Document"
+<tool id="_bmad/core/tasks/shard-doc" name="Shard Document"
   description="Splits large markdown documents into smaller, organized files based on level 2 (default) sections" webskip="true"
   standalone="true">
   <objective>Split large markdown documents into smaller, organized files based on level 2 sections using @kayvan/markdown-tree-parser tool</objective>
@@ -69,12 +69,12 @@ auto_execution_mode: 2
 
       <ask>What would you like to do with the original document `[source-document-name]`?
 
-Options:
-[d] Delete - Remove the original (recommended - shards can always be recombined)
-[m] Move to archive - Move original to a backup/archive location
-[k] Keep - Leave original in place (NOT recommended - defeats sharding purpose)
+        Options:
+        [d] Delete - Remove the original (recommended - shards can always be recombined)
+        [m] Move to archive - Move original to a backup/archive location
+        [k] Keep - Leave original in place (NOT recommended - defeats sharding purpose)
 
-Your choice (d/m/k):</ask>
+        Your choice (d/m/k):</ask>
 
       <check if="user selects 'd' (delete)">
         <action>Delete the original source document file</action>
@@ -97,12 +97,12 @@ Your choice (d/m/k):</ask>
         <action>Display warning to user:</action>
         <output>⚠️ WARNING: Keeping both original and sharded versions is NOT recommended.
 
-This creates confusion because:
-- The discover_inputs protocol may load the wrong version
-- Updates to one won't reflect in the other
-- You'll have duplicate content taking up space
+          This creates confusion because:
+          - The discover_inputs protocol may load the wrong version
+          - Updates to one won't reflect in the other
+          - You'll have duplicate content taking up space
 
-Consider deleting or archiving the original document.</output>
+          Consider deleting or archiving the original document.</output>
         <action>Confirm user choice: "Original document kept at: [source-document-path]"</action>
       </check>
     </step>
