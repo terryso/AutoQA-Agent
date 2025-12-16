@@ -22,9 +22,9 @@ date: '2025-12-13'
 
 - **CLI workflows**: `autoqa init` / `autoqa run`（单文件/目录执行、`--headless`/`--debug`、`--url` 覆盖 Base URL）
 - **Markdown → Task Context**: 从 Markdown 中提取前置条件与步骤/断言，生成 Claude Agent SDK 可用的任务上下文
-- **Visual Perception Loop**: 每次执行浏览器操作工具前自动截图，并把截图注入当前 turn，使模型“看着页面”决策
-- **Self-Healing Loop**: 工具/断言失败不直接中断，返回 `ToolResult(is_error: true)` 触发下一轮推理与重试
-- **Tooling surface**: Playwright adapters（navigate/click/fill/scroll/wait）与 assertions（text/visible）
+- **Visual Perception Loop**: 交互前通过 `snapshot` 获取可访问性快照（AX，含稳定 `ref`）供模型定位；工具调用可采集 JPEG 截图作为调试产物（默认仅失败写盘）
+- **Self-Healing Loop**: 工具失败不直接中断，返回 `ToolResult(is_error: true)` 触发下一轮推理与重试
+- **Tooling surface**: MCP browser tools（snapshot/navigate/click/fill/select_option/scroll/wait；click/fill 优先 ref，其次 targetDescription）
 
 **Non-Functional Requirements:**
 
@@ -37,7 +37,7 @@ date: '2025-12-13'
 
 - Primary domain: 开源 CLI 开发者/QA 工具
 - Complexity level: medium（无多租户/合规/实时协作，但存在多模态 + 自愈闭环 + 成本/可观测性约束）
-- Estimated architectural components: CLI layer / config & schema / markdown parser / agent runner / playwright tool adapters / screenshot pipeline / logging & reporting
+- Estimated architectural components: CLI layer / config & schema / markdown parser / agent runner / playwright tool adapters / screenshot pipeline / logging & output
 
 ### Technical Constraints & Dependencies（技术约束与依赖）
 
@@ -45,14 +45,14 @@ date: '2025-12-13'
 - 推荐使用当前 LTS：Node.js `v24.12.0`（Krypton，已通过 nodejs.org release notes 验证）
 - Claude Agent SDK（Node）：`@anthropic-ai/claude-agent-sdk@0.1.69`（已通过 npm registry 验证）
 - Playwright runtime：`playwright@1.57.0` / 测试：`@playwright/test@1.57.0`（已通过 npm registry 验证）
-- 需要 `ANTHROPIC_API_KEY` 环境变量
+- 需要 Claude Code 本地授权或 `ANTHROPIC_API_KEY` 环境变量（二者满足其一）
 - MVP：不做并发、不做复杂报告看板
 - 测试隔离：每个 Markdown 用例文件运行一个新的 Browser Context（隔离 cookie/session）
 
 ### Cross-Cutting Concerns Identified（横切关注点）
 
 - **Error model + retry/self-heal strategy**（工具失败与断言失败一致处理，且必须有限制/护栏）
-- **Screenshot capture/compress/inject pipeline**（成本与稳定性关键路径）
+- **Screenshot/Snapshot capture/compress pipeline**（成本与稳定性关键路径）
 - **Observability/logging for CI**（可读、可追踪、可定位失败）
 - **Determinism & test isolation**（可重复执行、环境隔离）
 
@@ -138,12 +138,13 @@ npx tsc --init
 
 - **执行模型**：单进程、按 spec 顺序执行（MVP 不做并发），确保可观测性与可重复性
 - **隔离模型**：每个 Markdown 文件创建新的 Browser Context；同一个 `autoqa run` 可复用同一个 Browser 实例以降低启动开销
-- **自愈护栏（必须实现）**：任何自愈/重试循环必须有限制（例如 `maxToolCallsPerSpec` / `maxConsecutiveErrors` / `maxRetriesPerStep`）
-- **截图策略（必须实现）**：
-  - 每次“会改变页面状态”的工具调用前截屏，作为当前 turn 的视觉上下文
-  - 工具失败/断言失败时必须附带失败截图（用于下一轮推理）
-  - 截图应压缩（优先 JPEG + quality；必要时通过固定 viewport 宽度实现近似“1024px”）
-- **产物策略**：默认只输出控制台日志；但在架构上预留 reporter 扩展点（未来可加 JUnit/JSON）
+- **自愈护栏（当前实现）**：主要依赖 Claude Agent SDK `maxTurns` 限制单个 spec 的总推理/工具回合（当前为 50）；后续可扩展更细粒度护栏
+- **上下文采集策略（当前实现）**：
+  - 交互步骤前先 `snapshot` 获取 AX 文本（含 `ref`），驱动 ref-first 定位
+  - 当 `AUTOQA_TOOL_CONTEXT=screenshot` 时，动作工具会采集 JPEG 截图（默认在执行前；可用 `AUTOQA_SCREENSHOT_TIMING` 调整）
+  - 当 `AUTOQA_TOOL_CONTEXT=snapshot` 时，动作工具会额外采集快照
+  - 写盘由 `AUTOQA_ARTIFACTS` 控制（默认仅失败写盘）
+- **产物策略（当前实现）**：默认写入 `.autoqa/runs/<runId>/run.log.jsonl`；截图/快照按 `AUTOQA_ARTIFACTS` 等开关写盘
 
 **Deferred Decisions (Post-MVP):**
 
@@ -163,19 +164,20 @@ npx tsc --init
 - **运行时状态（内存）**：建议以 `RunContext` 聚合
   - `runId`、`specPath`、`baseUrl`
   - `browser`、`context`、`page`
-  - `stepIndex`、`toolCallCount`、`consecutiveErrorCount`
-- **运行产物（文件系统，可配置）**：建议写入 `.autoqa/<runId>/...`
+  - `stepIndex`
+- **运行产物（文件系统）**：写入 `.autoqa/runs/<runId>/...`
   - `run.log.jsonl`：结构化日志（pino）
-  - `screenshots/`：截图（默认只保留失败相关；debug 模式可保留全部）
-  - `transcript.json`：可选，记录关键的 tool calls/结果，便于复现与调试
+  - `screenshots/`：工具截图（默认仅失败写盘；可通过 `AUTOQA_ARTIFACTS=all|fail|none` 控制）
+  - `snapshots/`：可访问性快照（ARIA: `.aria.yaml` / AX: `.ax.json`）
+  - `traces/`：Playwright trace（`.zip`）
 
 ### Authentication & Security（认证与安全）
 
-- **API key**：只从环境变量 `ANTHROPIC_API_KEY` 读取，不落盘
+- **授权**：支持 Claude Code 本地授权或从环境变量 `ANTHROPIC_API_KEY` 读取（不落盘）
 - **日志脱敏**：对 env、HTTP headers、以及可能包含 token 的字段进行 redaction
 - **截图敏感信息**：
   - 默认仅在失败/调试模式将截图持久化到磁盘
-  - CI 场景可仅把截图注入模型，不持久化
+  - CI 场景可禁用产物写盘（例如 `AUTOQA_ARTIFACTS=none`），仅保留结构化日志
 - **文件路径安全**：输入路径规范化（避免目录穿越），产物写入目录必须受控
 
 ### API & Communication Patterns（内部接口与通信模式）
@@ -186,17 +188,17 @@ npx tsc --init
 - **Runner layer**：按 spec 执行，负责生命周期与隔离（Browser/Context/Page）
 - **Agent layer**：集成 Claude Agent SDK，构建提示词/任务上下文，注册工具并驱动运行
 - **Tool layer**：对 Playwright 的稳定封装；失败时不得抛出终止异常，而返回 `is_error: true` 结果给 SDK
-- **Reporting/Logging**：订阅运行事件输出（控制台 + 可选文件），用于 CI 可观测性
+- **Logging/Output**：结构化日志写入 `.autoqa/runs/<runId>/run.log.jsonl`；debug 时输出到 stderr，供 CI 可观测性
 
-建议通过统一事件名（例如 `autoqa.spec.started`、`autoqa.tool.called`、`autoqa.heal.attempted`）贯穿全链路，确保日志字段一致、便于后续接入报告器。
+建议通过统一事件名（例如 `autoqa.run.started`、`autoqa.spec.started`、`autoqa.tool.called`、`autoqa.tool.result`）贯穿全链路，确保日志字段一致，便于后续解析与报告扩展。
 
 ### Infrastructure & Deployment（交付与 CI）
 
 - **交付形态**：npm 包（支持全局安装与 `npx autoqa`）
 - **退出码约定**：
   - `0`：全部 specs 通过
-  - `1`：存在失败（断言失败或自愈护栏触发）
-  - `2`：用户输入/配置错误（如缺少 `ANTHROPIC_API_KEY`、配置不合法）
+  - `1`：存在失败（spec 执行失败或护栏触发）
+  - `2`：用户输入/配置错误（如未检测到 Claude Code 授权且未设置 `ANTHROPIC_API_KEY`、配置不合法）
 - **CI**：GitHub Actions（建议最小流程）
   - 安装依赖
   - 安装 Playwright browsers
@@ -210,7 +212,7 @@ npx tsc --init
 为避免不同 AI agents 在实现时做出不兼容选择，本项目把一致性约束分为以下类别（约 7 类高风险冲突点）：
 
 - **命名规范**：CLI/flags、配置字段、工具名称、日志字段
-- **分层边界**：CLI/Runner/Agent/Tools/Browser/Reporting
+- **分层边界**：CLI/Runner/Agent/Tools/Browser/Logging
 - **错误与返回模型**：throw vs `is_error`、错误码、可重试语义
 - **截图与自愈策略**：截图时机、压缩、保留策略、护栏
 - **可观测性**：日志结构、事件名、输出顺序
@@ -228,19 +230,21 @@ npx tsc --init
 **配置文件（JSON）：**
 
 - 文件名固定：`autoqa.config.json`
-- 字段命名统一 `camelCase`（例如 `baseUrl`、`schemaVersion`、`maxToolCallsPerSpec`）
-- 必须包含 `schemaVersion`（字符串或整数均可，但要固定一种；推荐整数）
+- 字段命名统一 `camelCase`
+- 必须包含 `schemaVersion`（当前实现仅包含该字段，且为整数）
 
 **环境变量：**
 
-- `ANTHROPIC_API_KEY`（必须）
-- 未来如需扩展，统一 `AUTOQA_*` 前缀
+- `ANTHROPIC_API_KEY`（可选：未使用 Claude Code 本地授权时需要）
+- `AUTOQA_ARTIFACTS`：`all|fail|none`（控制截图/快照等产物是否写盘；默认 `fail`）
+- `AUTOQA_TOOL_CONTEXT`：`screenshot|snapshot|none`（控制工具调用时额外采集的上下文类型；默认 `screenshot`）
+- `AUTOQA_SCREENSHOT_TIMING`：`pre|post`（截图时机；默认 `pre`）
+- `AUTOQA_PREFLIGHT_NAVIGATE`：`1` 开启预热导航到 baseUrl（默认关闭）
 
 **工具命名（注册到 Agent SDK 的 toolName）：**
 
-- 浏览器动作：`navigate`、`click`、`fill`、`scroll`、`wait`
-- 断言：`assertTextPresent`、`assertElementVisible`
-- 约定：所有工具都用动词开头；断言用 `assert*` 前缀
+- 浏览器工具：`snapshot`、`navigate`、`click`、`fill`、`select_option`、`scroll`、`wait`
+- 约定：所有工具都用动词开头
 
 **日志字段：**
 
@@ -265,14 +269,13 @@ npx tsc --init
   - **失败不得 throw 终止**，必须返回错误结果给 SDK 驱动自愈
 - `src/browser/**`
   - 只处理 Playwright 对象创建、截图、定位辅助
-- `src/reporting/**`
-  - 输出与产物生成（MVP：console）
+- `src/logging/**`
+  - 只负责结构化日志与脱敏（写入 `.autoqa/runs/<runId>/run.log.jsonl`；debug 时输出到 stderr）
 
 **测试组织：**
 
 - 单元测试放在 `tests/unit/**`
-- 集成测试放在 `tests/integration/**`
-- Playwright e2e（如需要）放在 `tests/e2e/**`
+- 集成测试/Playwright e2e（如需要）可后续补齐
 
 ### Format Patterns（数据契约/返回格式）
 
@@ -291,25 +294,27 @@ npx tsc --init
 
 ### Communication Patterns（事件与日志顺序）
 
-建议采用事件驱动（例如 Node `EventEmitter`）贯穿 runner：
+当前通过结构化日志事件（`event` 字段）记录 runner 生命周期：
 
-- `autoqa.run.started` → `autoqa.spec.started` → (tool/step events...) → `autoqa.spec.finished` → `autoqa.run.finished`
+- `autoqa.run.started` → `autoqa.spec.started` → (tool events...) → `autoqa.spec.finished` → `autoqa.run.finished`
 
-事件负载字段遵循日志字段规范，以便 reporter 只需订阅事件即可输出。
+事件负载字段遵循日志字段规范，便于后续解析与报告扩展。
 
 ### Process Patterns（流程与护栏）
 
-**截图与视觉注入：**
+**ref-first 与快照：**
 
-- 在任何“可能改变页面状态”的工具调用前都截屏
-- 失败时必须截屏并附带错误信息（供下一轮推理）
-- 截图默认压缩（例如 JPEG，且固定 viewport 宽度以控制 token）
+- 在每个交互步骤（`click`/`fill`/`select_option`）前先调用 `snapshot`，从输出中提取 `[ref=...]`
+- 优先使用 `ref` 调用动作工具；若失败可重新 `snapshot` 后重试一次；最后再回退到 `targetDescription`
+
+**截图产物（可选）：**
+
+- 当 `AUTOQA_TOOL_CONTEXT=screenshot` 时，动作工具会在执行前（默认；可用 `AUTOQA_SCREENSHOT_TIMING` 调整）采集 JPEG 截图
+- 截图/快照是否写盘由 `AUTOQA_ARTIFACTS` 控制（默认仅失败写盘）
 
 **自愈护栏（必须）：**
 
-- `maxToolCallsPerSpec`：限制单个 spec 的总工具调用次数
-- `maxConsecutiveErrors`：限制连续失败次数（避免陷入同一错误循环）
-- `maxRetriesPerStep`：限制单个步骤重试次数
+- 主要依赖 Claude Agent SDK `maxTurns` 限制单个 spec 的总推理/工具回合（当前为 50）
 
 一旦触发护栏，runner 必须将该 spec 标记为失败并继续（或按配置中止整个 run）。
 
@@ -348,43 +353,58 @@ npx tsc --init
 AutoQA-Agent/
 ├── README.md
 ├── package.json
+├── package-lock.json
 ├── tsconfig.json
 ├── tsup.config.ts
 ├── vitest.config.ts
-├── playwright.config.ts
 ├── .gitignore
-├── .env.example
+├── .mcp.json
+├── autoqa.config.json
 ├── docs/
 │   ├── prd.md
 │   ├── project-brief.md
 │   └── architecture.md
 ├── specs/
-│   └── login-example.md
+│   ├── login-example.md
+│   ├── saucedemo-01-login.md
+│   ├── saucedemo-02-sorting.md
+│   ├── saucedemo-03-cart.md
+│   ├── saucedemo-04-checkout.md
+│   └── saucedemo-05-logout.md
 ├── src/
 │   ├── cli/
 │   │   ├── cli.ts
+│   │   ├── program.ts
+│   │   ├── output.ts
+│   │   ├── fs-errors.ts
 │   │   └── commands/
 │   │       ├── init.ts
 │   │       └── run.ts
 │   ├── config/
-│   │   ├── schema.ts
 │   │   ├── defaults.ts
-│   │   └── load.ts
+│   │   ├── init.ts
+│   │   └── schema.ts
 │   ├── markdown/
-│   │   ├── parse-markdown.ts
-│   │   └── build-task-context.ts
+│   │   ├── parse-markdown-spec.ts
+│   │   └── spec-types.ts
 │   ├── runner/
-│   │   ├── run-directory.ts
-│   │   └── run-spec-file.ts
+│   │   ├── preflight.ts
+│   │   ├── run-specs.ts
+│   │   ├── trace-paths.ts
+│   │   └── validate-run-args.ts
 │   ├── agent/
-│   │   ├── create-agent.ts
-│   │   ├── run-agent.ts
-│   │   ├── prompts.ts
-│   │   └── guardrails.ts
+│   │   ├── browser-tools-mcp.ts
+│   │   ├── pre-action-screenshot.ts
+│   │   └── run-agent.ts
+│   ├── auth/
+│   │   └── probe.ts
 │   ├── browser/
 │   │   ├── create-browser.ts
-│   │   ├── create-context.ts
-│   │   └── screenshot.ts
+│   │   ├── screenshot.ts
+│   │   └── snapshot.ts
+│   ├── specs/
+│   │   ├── discover.ts
+│   │   └── init.ts
 │   ├── tools/
 │   │   ├── index.ts
 │   │   ├── navigate.ts
@@ -392,22 +412,15 @@ AutoQA-Agent/
 │   │   ├── fill.ts
 │   │   ├── scroll.ts
 │   │   ├── wait.ts
-│   │   └── assertions/
-│   │       ├── assert-text-present.ts
-│   │       └── assert-element-visible.ts
+│   │   ├── playwright-error.ts
+│   │   └── tool-result.ts
 │   ├── logging/
+│   │   ├── index.ts
 │   │   ├── logger.ts
-│   │   └── redact.ts
-│   ├── reporting/
-│   │   ├── reporter.ts
-│   │   └── console-reporter.ts
-│   └── util/
-│       ├── errors.ts
-│       ├── fs.ts
-│       └── timing.ts
+│   │   ├── redact.ts
+│   │   └── types.ts
 ├── tests/
 │   ├── unit/
-│   └── integration/
 ├── dist/               (generated)
 └── .autoqa/             (generated)
 ```
@@ -434,7 +447,6 @@ AutoQA-Agent/
 **Reporting/Logging Boundaries:**
 
 - `src/logging/**` 只负责日志初始化与脱敏
-- `src/reporting/**` 只负责把运行事件渲染成输出/产物（MVP：console）
 
 ### Requirements to Structure Mapping（需求到目录映射）
 
@@ -444,7 +456,6 @@ AutoQA-Agent/
 - **FR4 视觉感知循环** → `src/browser/screenshot.ts` + `src/agent/run-agent.ts`
 - **FR5 自愈闭环** → `src/agent/**` 统一实现
 - **FR6 浏览器操作工具** → `src/tools/*`
-- **FR7 断言工具** → `src/tools/assertions/*`
 
 ### Integration Points（集成点）
 
@@ -456,14 +467,14 @@ AutoQA-Agent/
 **Internal Communication:**
 
 - CLI → Runner：传递选中的 spec 列表、运行参数（headless/debug/url override）
-- Runner → Agent：传递 `RunContext`（含 page）与 `TaskContext`（由 Markdown 解析生成）
+- Runner → Agent：传递 runId/baseUrl/specPath/spec/page/logger 等运行上下文
 - Agent → Tools：通过 SDK 工具调用接口
 
 ### Data Flow（数据流）
 
-- `autoqa run` → load config → discover specs → parse markdown → build task context
+- `autoqa run` → load config → discover specs → parse markdown
 - per spec：create browser context → create agent + register tools
-- per tool call：capture screenshot → tool execute → return ToolResult（ok/is_error）
+- per tool call：按 `AUTOQA_TOOL_CONTEXT` 采集 screenshot/snapshot（可选）→ tool execute → return ToolResult（ok/is_error）
 - failure：ToolResult(is_error) → SDK next turn reasoning → retry until success or guardrails hit
 
 ## Architecture Validation Results（架构验证结果）
@@ -479,28 +490,28 @@ AutoQA-Agent/
 **Pattern Consistency（模式一致性）:**
 
 - ToolResult 统一返回模型与 `is_error` 语义对齐，能让 SDK 在失败时进入下一轮推理而不是被异常中断
-- “截图 → 注入 → 工具调用 → 结果回流” 作为强约束，与自愈护栏共同限制成本与无限重试风险
+- “快照/截图采集 → 工具调用 → 结果回流” 作为强约束，与自愈护栏共同限制成本与无限重试风险
 
 **Structure Alignment（结构对齐）:**
 
-- 目录分层与边界（CLI/Runner/Agent/Tools/Browser/Reporting）与需求映射一致，避免在实现期出现“哪里都能直接调用 page”的漂移
+- 目录分层与边界（CLI/Runner/Agent/Tools/Browser/Logging）与需求映射一致，避免在实现期出现“哪里都能直接调用 page”的漂移
 
 ### Requirements Coverage Validation（需求覆盖验证）
 
 **Functional Requirements Coverage（功能需求覆盖）:**
 
 - FR1/FR2：CLI 初始化与执行路径在 `src/cli/**`，调度与隔离在 `src/runner/**`
-- FR3：Markdown 解析与 TaskContext 构建在 `src/markdown/**`
+- FR3：Markdown 解析在 `src/markdown/**`
 - FR4：视觉感知循环由 `src/browser/screenshot.ts` + `src/agent/run-agent.ts` 保障
 - FR5：自愈闭环与护栏由 `src/agent/**` 统一实现
-- FR6/FR7：工具与断言封装在 `src/tools/**`
+- FR6：工具封装在 `src/tools/**`
 
 **Non-Functional Requirements Coverage（非功能需求覆盖）:**
 
 - 启动速度：通过“单次 run 复用 Browser、每 spec 新建 Context”平衡性能与隔离
 - 稳定性：隔离性 + 确定性设置 + 自愈护栏与错误回流
 - 成本控制：截图压缩与持久化策略可配置，默认只保留失败相关
-- 可观测性：结构化日志（pino）+ 事件流（runner 统一发事件）
+- 可观测性：结构化日志（pino）+ 统一 `event` 字段贯穿全链路
 
 ### Implementation Readiness Validation（实现就绪验证）
 
@@ -528,7 +539,7 @@ AutoQA-Agent/
 **Important Gaps（重要但不阻塞）:**
 
 - 明确 Markdown spec 的最小语法约定（章节名称、步骤/断言表达方式），并在 `autoqa init` 的模板中固化
-- 明确事件 payload 的字段契约（供未来 reporter 扩展：JUnit/JSON）
+- 明确事件 payload 的字段契约（供未来报告扩展：JUnit/JSON）
 
 **Nice-to-Have Gaps（可延后）:**
 
@@ -577,7 +588,7 @@ AutoQA-Agent/
 **完整的 Architecture Decision Document**
 
 - 关键技术栈与版本（已验证）
-- 自愈与视觉注入的关键约束与护栏
+- 自愈与 ref-first/快照的关键约束与护栏
 - 多 AI agents 一致性规则（命名/分层/错误模型/日志字段）
 - 目录结构与需求映射
 - 架构验证与差距分析
@@ -585,7 +596,7 @@ AutoQA-Agent/
 **可实现的工程蓝图**
 
 - 可直接落地的目录树与模块边界
-- 可扩展点明确（tools/assertions/reporters）
+- 可扩展点明确（tools/agent/runner/logging）
 
 ### Next Steps（下一步）
 

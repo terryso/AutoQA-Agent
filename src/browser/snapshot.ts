@@ -76,10 +76,16 @@ export async function captureAxSnapshot(
 ): Promise<AxSnapshotResult> {
   const timeout = options.timeout ?? DEFAULT_SNAPSHOT_TIMEOUT
 
-  try {
-    const snapshot = await withTimeout((page as any)._snapshotForAI({ timeout }), timeout)
-    return { ok: true, json: snapshot as Record<string, unknown> | null }
-  } catch (err: unknown) {
+  const errors: string[] = []
+
+  const snapshotForAI = (page as any)?._snapshotForAI
+  if (typeof snapshotForAI === 'function') {
+    try {
+      const snapshot = await withTimeout(Promise.resolve(snapshotForAI.call(page, { timeout })), timeout)
+      return { ok: true, json: snapshot as Record<string, unknown> | null }
+    } catch (err: unknown) {
+      errors.push(toErrorMessage(err))
+    }
   }
 
   try {
@@ -89,6 +95,11 @@ export async function captureAxSnapshot(
       return { ok: true, json: snapshot as Record<string, unknown> | null }
     }
   } catch (err: unknown) {
+    errors.push(toErrorMessage(err))
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, error: `Failed to capture AX snapshot: ${errors.join('; ')}` }
   }
 
   return { ok: false, error: `Failed to capture AX snapshot: ${toErrorMessage(new Error('No supported AX snapshot method available'))}` }
