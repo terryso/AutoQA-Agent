@@ -33,12 +33,17 @@ Steps:
 ${steps}
 
 Rules:
-- Use ONLY the provided browser tools (navigate/click/fill/scroll/wait).
+- Use ONLY the provided browser tools (snapshot/navigate/click/fill/select_option/scroll/wait).
 - Execute steps in order.
 - The browser page starts at about:blank. Always call navigate('/') first to open the site.
 - Tool inputs MUST be plain strings (do not include Markdown backticks or quotes around values).
 - Keep tool inputs minimal and avoid leaking secrets.
-- If an action fails, continue with best-effort reasoning and try a reasonable alternative.
+- Ref-first execution:
+  - Before each interaction step (click/fill/select_option), call snapshot to get an accessibility snapshot.
+  - Find the target element in the snapshot and extract its ref like [ref=e15].
+  - Call the action tool using ref (preferred) instead of targetDescription.
+  - If the ref is not found or action fails, capture a new snapshot and retry once.
+  - Only if ref-based action is not possible, fall back to using targetDescription.
 `
 }
 
@@ -126,9 +131,11 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
         browser: server,
       },
       allowedTools: [
+        'mcp__browser__snapshot',
         'mcp__browser__navigate',
         'mcp__browser__click',
         'mcp__browser__fill',
+        'mcp__browser__select_option',
         'mcp__browser__scroll',
         'mcp__browser__wait',
       ],

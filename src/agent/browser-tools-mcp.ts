@@ -1,9 +1,10 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 
-import type { Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
 
 import { click, fill, navigate, scroll, wait } from '../tools/index.js'
+import { toToolError } from '../tools/playwright-error.js'
 import type { ContentBlock } from './pre-action-screenshot.js'
 import { runWithPreActionScreenshot } from './pre-action-screenshot.js'
 import type { Logger } from '../logging/index.js'
@@ -179,10 +180,52 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
     }
   }
 
+  async function resolveRefLocator(ref: string): Promise<Locator> {
+    try {
+      const snapshotForAI = (options.page as any)?._snapshotForAI
+      if (typeof snapshotForAI === 'function') {
+        await snapshotForAI.call(options.page, { timeout: 5000 })
+      }
+    } catch {
+    }
+    return options.page.locator(`aria-ref=${ref}`).first()
+  }
+
   return createSdkMcpServer({
     name: 'autoqa-browser-tools',
     version: '0.0.0',
     tools: [
+      tool(
+        'snapshot',
+        'Capture an accessibility snapshot that includes stable refs for interactable elements.',
+        {},
+        async () => {
+          const fileBaseName = nextFileBaseName('snapshot')
+          const startTime = Date.now()
+          logToolCall('snapshot', {})
+          writeDebug(options.debug, 'mcp_tool=snapshot')
+
+          const snapshotCapture = await capturePreActionSnapshot()
+
+          const snapshotMeta = await writeSnapshotsIfNeeded(
+            snapshotCapture,
+            { cwd: options.cwd, runId: options.runId, fileBaseName },
+            shouldWriteArtifacts(options.debug, true),
+          )
+
+          logToolResult('snapshot', startTime, { ok: true } as any, { snapshot: snapshotMeta })
+
+          const content: ContentBlock[] = []
+          if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
+
+          const full = snapshotCapture.ax.ok && snapshotCapture.ax.json && typeof (snapshotCapture.ax.json as any).full === 'string'
+            ? String((snapshotCapture.ax.json as any).full)
+            : ''
+          content.push({ type: 'text', text: full.length > 0 ? full : 'NO_AX_SNAPSHOT_AVAILABLE' })
+
+          return { content, isError: false }
+        },
+      ),
       tool(
         'navigate',
         'Navigate the page to a given URL (absolute or /path relative to baseUrl). Captures a pre-action screenshot and returns it as an image block.',
@@ -235,15 +278,17 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         'click',
         'Click an element described by targetDescription. Captures a pre-action screenshot and returns it as an image block.',
         {
-          targetDescription: z.string(),
+          targetDescription: z.string().optional(),
+          ref: z.string().optional(),
         },
         async (args) => {
           const contextMode = getToolContextMode()
-          const targetDescription = normalizeToolStringInput(args.targetDescription)
+          const targetDescription = typeof (args as any).targetDescription === 'string' ? normalizeToolStringInput((args as any).targetDescription) : ''
+          const ref = typeof (args as any).ref === 'string' ? normalizeToolStringInput((args as any).ref) : ''
           const fileBaseName = nextFileBaseName('click')
           const startTime = Date.now()
-          logToolCall('click', { targetDescription })
-          writeDebug(options.debug, `mcp_tool=click target=${targetDescription}`)
+          logToolCall('click', { targetDescription, ref })
+          writeDebug(options.debug, `mcp_tool=click target=${targetDescription}${ref ? ` ref=${ref}` : ''}`)
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -256,6 +301,27 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             quality: DEFAULT_JPEG_QUALITY,
             action: async () => {
               await snapshotCapturePromise
+              if (ref) {
+                try {
+                  const locator = await resolveRefLocator(ref)
+                  const count = await locator.count()
+                  if (count <= 0) {
+                    return {
+                      ok: false as const,
+                      error: {
+                        code: 'ELEMENT_NOT_FOUND',
+                        message: `Ref not found: ${ref}`,
+                        retriable: true,
+                        cause: undefined,
+                      },
+                    }
+                  }
+                  await locator.click()
+                  return { ok: true as const, data: { ref, targetDescription } }
+                } catch (err: unknown) {
+                  return { ok: false as const, error: toToolError(err) }
+                }
+              }
               return click({ page: options.page, targetDescription })
             },
           })
@@ -283,17 +349,19 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
         'fill',
         'Fill an input described by targetDescription with the provided text. Captures a pre-action screenshot and returns it as an image block.',
         {
-          targetDescription: z.string(),
+          targetDescription: z.string().optional(),
+          ref: z.string().optional(),
           text: z.string(),
         },
         async (args) => {
           const contextMode = getToolContextMode()
-          const targetDescription = normalizeToolStringInput(args.targetDescription)
+          const targetDescription = typeof (args as any).targetDescription === 'string' ? normalizeToolStringInput((args as any).targetDescription) : ''
+          const ref = typeof (args as any).ref === 'string' ? normalizeToolStringInput((args as any).ref) : ''
           const text = normalizeToolStringInput(args.text)
           const fileBaseName = nextFileBaseName('fill')
           const startTime = Date.now()
-          logToolCall('fill', { targetDescription, text })
-          writeDebug(options.debug, `mcp_tool=fill target=${targetDescription} text_len=${text.length}`)
+          logToolCall('fill', { targetDescription, ref, text })
+          writeDebug(options.debug, `mcp_tool=fill target=${targetDescription}${ref ? ` ref=${ref}` : ''} text_len=${text.length}`)
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -306,6 +374,40 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             quality: DEFAULT_JPEG_QUALITY,
             action: async () => {
               await snapshotCapturePromise
+              if (ref) {
+                try {
+                  const locator = await resolveRefLocator(ref)
+                  const count = await locator.count()
+                  if (count <= 0) {
+                    return {
+                      ok: false as const,
+                      error: {
+                        code: 'ELEMENT_NOT_FOUND',
+                        message: `Ref not found: ${ref}`,
+                        retriable: true,
+                        cause: undefined,
+                      },
+                    }
+                  }
+                  try {
+                    await locator.fill(text)
+                    return { ok: true as const, data: { ref, targetDescription, textLength: text.length } }
+                  } catch (err: unknown) {
+                    try {
+                      const descendant = locator.locator('input, textarea, [contenteditable="true"]').first()
+                      const dcount = await descendant.count()
+                      if (dcount > 0) {
+                        await descendant.fill(text)
+                        return { ok: true as const, data: { ref, targetDescription, textLength: text.length } }
+                      }
+                    } catch {
+                    }
+                    throw err
+                  }
+                } catch (err: unknown) {
+                  return { ok: false as const, error: toToolError(err) }
+                }
+              }
               return fill({ page: options.page, targetDescription, text })
             },
           })
@@ -320,6 +422,74 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             : ({ captured: false } as SnapshotMeta)
 
           logToolResult('fill', startTime, result as any, { ...meta, snapshot: snapshotMeta })
+
+          const content: ContentBlock[] = []
+          if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
+          content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
+
+          return { content, isError: !result.ok }
+        },
+      ),
+      tool(
+        'select_option',
+        'Select an option in a dropdown using a ref from the latest snapshot.',
+        {
+          ref: z.string(),
+          label: z.string(),
+        },
+        async (args) => {
+          const contextMode = getToolContextMode()
+          const ref = normalizeToolStringInput(args.ref)
+          const label = normalizeToolStringInput(args.label)
+          const fileBaseName = nextFileBaseName('select_option')
+          const startTime = Date.now()
+          logToolCall('select_option', { ref, label })
+          writeDebug(options.debug, `mcp_tool=select_option ref=${ref} label=${label}`)
+
+          const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
+
+          const { result, meta } = await runWithPreActionScreenshot({
+            page: options.page,
+            runId: options.runId,
+            debug: options.debug,
+            cwd: options.cwd,
+            fileBaseName,
+            quality: DEFAULT_JPEG_QUALITY,
+            action: async () => {
+              await snapshotCapturePromise
+              try {
+                const locator = await resolveRefLocator(ref)
+                const count = await locator.count()
+                if (count <= 0) {
+                  return {
+                    ok: false as const,
+                    error: {
+                      code: 'ELEMENT_NOT_FOUND',
+                      message: `Ref not found: ${ref}`,
+                      retriable: true,
+                      cause: undefined,
+                    },
+                  }
+                }
+                await locator.selectOption({ label })
+                return { ok: true as const, data: { ref, label } }
+              } catch (err: unknown) {
+                return { ok: false as const, error: toToolError(err) }
+              }
+            },
+          })
+
+          const snapshotCapture = await snapshotCapturePromise
+          const snapshotMeta = snapshotCapture
+            ? await writeSnapshotsIfNeeded(
+              snapshotCapture,
+              { cwd: options.cwd, runId: options.runId, fileBaseName },
+              shouldWriteArtifacts(options.debug, Boolean(result.ok)),
+            )
+            : ({ captured: false } as SnapshotMeta)
+
+          logToolResult('select_option', startTime, result as any, { ...meta, snapshot: snapshotMeta })
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
