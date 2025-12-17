@@ -1,6 +1,6 @@
 # Story 3.2: 工具/断言失败回流到 Agent SDK 触发自愈重试
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -99,4 +99,10 @@ Cascade
 
 ### Completion Notes List
 
+- ✅ MCP 工具在失败时回流 `isError: true`，并仅在失败时注入 screenshot `image` block（降低成功路径 token 成本）
+- ✅ 新增 MCP 错误映射回归单测：覆盖 `isError`/`error.code` 回流与失败注入 image block
+
 ### File List
+
+- `src/agent/browser-tools-mcp.ts` (修改: 失败时注入 image block)
+- `tests/unit/agent-mcp-error-mapping.test.ts` (新增: MCP 错误映射回归测试)

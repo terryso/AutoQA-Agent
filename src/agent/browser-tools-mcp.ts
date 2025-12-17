@@ -268,6 +268,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 
@@ -342,6 +343,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 
@@ -431,6 +433,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 
@@ -499,6 +502,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 
@@ -547,6 +551,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 
@@ -594,6 +599,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 
@@ -642,6 +648,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 
@@ -738,6 +745,7 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
 
           const content: ContentBlock[] = []
           if (meta.error) content.push({ type: 'text', text: `SCREENSHOT_FAILED: ${meta.error}` })
+          if (!result.ok && meta.imageBlock) content.push(meta.imageBlock)
           if (snapshotMeta.error) content.push({ type: 'text', text: `SNAPSHOT_FAILED: ${snapshotMeta.error}` })
           content.push({ type: 'text', text: safeStringify(summarizeToolResult(result as any)) })
 

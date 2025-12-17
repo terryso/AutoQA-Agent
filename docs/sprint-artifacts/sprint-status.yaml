@@ -62,7 +62,7 @@ development_status:
 
   epic-3: in-progress
   3-1-assert-tools-asserttextpresent-assertelementvisible: done
-  3-2-errors-to-agent-sdk-self-heal-retry: ready-for-dev
+  3-2-errors-to-agent-sdk-self-heal-retry: done
   3-3-self-heal-guardrails-max-tool-calls-errors-retries: backlog
   3-4-failure-artifacts-exit-codes-ci: backlog
   epic-3-retrospective: optional
