@@ -70,6 +70,8 @@ Rules:
   - Call the action tool using ref (preferred) instead of targetDescription.
   - If the ref is not found or action fails, capture a new snapshot and retry once.
   - Only if ref-based action is not possible, fall back to using targetDescription.
+  - NEVER guess or invent a ref. A ref must be exactly like e15 and must be copied from a snapshot in this run.
+  - For icon-only UI (e.g. the cart icon in the top-right on SauceDemo inventory page), prefer stable attribute-based targetDescription instead of ref, e.g. data-test=shopping-cart-link or class=shopping_cart_link.
 `
 }
 
@@ -185,6 +187,11 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
 
   const tryAbortStream = async (): Promise<void> => {
     const anyResponse = response as any
+
+    try {
+      anyResponse?.abortController?.abort?.()
+    } catch {}
+
     const fn = anyResponse?.return
     if (typeof fn === 'function') {
       try {
@@ -195,140 +202,143 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
     }
   }
 
-  for await (const message of response as any) {
-    if (message?.type === 'system') {
-      const subtype = typeof message?.subtype === 'string' ? message.subtype : undefined
-      writeDebug(options.debug, subtype ? `system=${subtype}` : `system=${safeStringify(message)}`)
+  try {
+    for await (const message of response as any) {
+      if (message?.type === 'system') {
+        const subtype = typeof message?.subtype === 'string' ? message.subtype : undefined
+        writeDebug(options.debug, subtype ? `system=${subtype}` : `system=${safeStringify(message)}`)
 
-      if (subtype === 'init') {
-        try {
-          const statuses = await (response as any)?.mcpServerStatus?.()
-          if (Array.isArray(statuses)) {
-            writeDebug(options.debug, `mcp_status=${safeStringify(statuses)}`)
-          }
-        } catch {
-          
-        }
-      }
-      continue
-    }
-
-    if (message?.type === 'assistant') {
-      const content = getAssistantContent(message)
-      if (typeof content === 'string' && content.length > 0) {
-        writeDebug(options.debug, content)
-        continue
-      }
-
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block?.type === 'text') {
-            const text = safeString(block?.text)
-            if (text.length > 0) writeDebug(options.debug, text)
-            continue
-          }
-
-          if (block?.type === 'tool_use') {
-            const name = safeString(block?.name)
-            const id = safeString(block?.id)
-            const input = block?.input
-
-            updateCountersOnToolCall(counters)
-            const stepIndex = parseStepIndex((input as any)?.stepIndex)
-            if (id) toolUseStepIndex.set(id, stepIndex)
-
-            const violation = checkGuardrails(counters, guardrailLimits, stepIndex)
-            if (violation) {
-              options.logger.log({
-                event: 'autoqa.guardrail.triggered',
-                runId: options.runId,
-                specPath: options.specPath,
-                stepIndex,
-                code: violation.code,
-                limit: violation.limit,
-                actual: violation.actual,
-              })
-              await tryAbortStream()
-              throw violation
+        if (subtype === 'init') {
+          try {
+            const statuses = await (response as any)?.mcpServerStatus?.()
+            if (Array.isArray(statuses)) {
+              writeDebug(options.debug, `mcp_status=${safeStringify(statuses)}`)
             }
-
-            writeDebug(
-              options.debug,
-              `tool_use=${name}${id ? ` id=${id}` : ''} input=${truncate(safeStringify(input), 400)}`,
-            )
-            continue
+          } catch {
           }
-
-          writeDebug(options.debug, `assistant_block=${truncate(safeStringify(block), 400)}`)
         }
         continue
       }
 
-      if (content != null) writeDebug(options.debug, `assistant=${truncate(safeStringify(content), 400)}`)
-      continue
-    }
+      if (message?.type === 'assistant') {
+        const content = getAssistantContent(message)
+        if (typeof content === 'string' && content.length > 0) {
+          writeDebug(options.debug, content)
+          continue
+        }
 
-    if (message?.type === 'user') {
-      const content = getUserContent(message)
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block?.type === 'tool_result') {
-            const toolUseId = safeString(block?.tool_use_id)
-            const isError = Boolean(block?.is_error)
-            const text = safeString(block?.content)
-
-            const stepIndex = toolUseId ? (toolUseStepIndex.get(toolUseId) ?? null) : null
-            if (toolUseId) toolUseStepIndex.delete(toolUseId)
-            updateCountersOnToolResult(counters, stepIndex, isError)
-
-            const violation = checkGuardrails(counters, guardrailLimits, stepIndex)
-            if (violation) {
-              options.logger.log({
-                event: 'autoqa.guardrail.triggered',
-                runId: options.runId,
-                specPath: options.specPath,
-                stepIndex,
-                code: violation.code,
-                limit: violation.limit,
-                actual: violation.actual,
-              })
-              await tryAbortStream()
-              throw violation
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block?.type === 'text') {
+              const text = safeString(block?.text)
+              if (text.length > 0) writeDebug(options.debug, text)
+              continue
             }
 
-            writeDebug(
-              options.debug,
-              `tool_result${toolUseId ? ` id=${toolUseId}` : ''} is_error=${isError} content=${truncate(text, 400)}`,
-            )
-            continue
+            if (block?.type === 'tool_use') {
+              const name = safeString(block?.name)
+              const id = safeString(block?.id)
+              const input = block?.input
+
+              updateCountersOnToolCall(counters)
+              const stepIndex = parseStepIndex((input as any)?.stepIndex)
+              if (id) toolUseStepIndex.set(id, stepIndex)
+
+              const violation = checkGuardrails(counters, guardrailLimits, stepIndex)
+              if (violation) {
+                options.logger.log({
+                  event: 'autoqa.guardrail.triggered',
+                  runId: options.runId,
+                  specPath: options.specPath,
+                  stepIndex,
+                  code: violation.code,
+                  limit: violation.limit,
+                  actual: violation.actual,
+                })
+                await tryAbortStream()
+                throw violation
+              }
+
+              writeDebug(
+                options.debug,
+                `tool_use=${name}${id ? ` id=${id}` : ''} input=${truncate(safeStringify(input), 400)}`,
+              )
+              continue
+            }
+
+            writeDebug(options.debug, `assistant_block=${truncate(safeStringify(block), 400)}`)
+          }
+          continue
+        }
+
+        if (content != null) writeDebug(options.debug, `assistant=${truncate(safeStringify(content), 400)}`)
+        continue
+      }
+
+      if (message?.type === 'user') {
+        const content = getUserContent(message)
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block?.type === 'tool_result') {
+              const toolUseId = safeString(block?.tool_use_id)
+              const isError = Boolean(block?.is_error)
+              const text = safeString(block?.content)
+
+              const stepIndex = toolUseId ? (toolUseStepIndex.get(toolUseId) ?? null) : null
+              if (toolUseId) toolUseStepIndex.delete(toolUseId)
+              updateCountersOnToolResult(counters, stepIndex, isError)
+
+              const violation = checkGuardrails(counters, guardrailLimits, stepIndex)
+              if (violation) {
+                options.logger.log({
+                  event: 'autoqa.guardrail.triggered',
+                  runId: options.runId,
+                  specPath: options.specPath,
+                  stepIndex,
+                  code: violation.code,
+                  limit: violation.limit,
+                  actual: violation.actual,
+                })
+                await tryAbortStream()
+                throw violation
+              }
+
+              writeDebug(
+                options.debug,
+                `tool_result${toolUseId ? ` id=${toolUseId}` : ''} is_error=${isError} content=${truncate(text, 400)}`,
+              )
+              continue
+            }
           }
         }
+        continue
       }
-      continue
-    }
 
-    if (message?.type === 'error') {
-      writeDebug(options.debug, `error=${safeStringify(message)}`)
-      continue
-    }
+      if (message?.type === 'error') {
+        writeDebug(options.debug, `error=${safeStringify(message)}`)
+        continue
+      }
 
-    if (message?.type === 'result') {
-      writeDebug(options.debug, `result=${safeStringify(message)}`)
+      if (message?.type === 'result') {
+        writeDebug(options.debug, `result=${safeStringify(message)}`)
 
-      if (message?.subtype === 'success') {
-        if (message?.is_error) {
-          const errors = Array.isArray(message?.errors) ? message.errors.join('\n') : undefined
-          throw new Error(errors && errors.length > 0 ? errors : 'Agent run failed')
+        if (message?.subtype === 'success') {
+          if (message?.is_error) {
+            const errors = Array.isArray(message?.errors) ? message.errors.join('\n') : undefined
+            throw new Error(errors && errors.length > 0 ? errors : 'Agent run failed')
+          }
+          return
         }
-        return
+
+        const errors = Array.isArray(message?.errors) ? message.errors.join('\n') : undefined
+        throw new Error(errors && errors.length > 0 ? errors : 'Agent run failed')
       }
 
-      const errors = Array.isArray(message?.errors) ? message.errors.join('\n') : undefined
-      throw new Error(errors && errors.length > 0 ? errors : 'Agent run failed')
+      writeDebug(options.debug, `message=${safeStringify(message)}`)
     }
 
-    writeDebug(options.debug, `message=${safeStringify(message)}`)
+    throw new Error('Agent stream ended without a final result')
+  } finally {
+    await tryAbortStream()
   }
-
-  throw new Error('Agent stream ended without a final result')
 }

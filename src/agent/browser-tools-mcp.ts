@@ -53,6 +53,10 @@ function safeStringify(value: unknown): string {
   }
 }
 
+function isValidSnapshotRef(ref: string): boolean {
+  return /^e\d+$/.test(ref)
+}
+
 function writeDebug(enabled: boolean, line: string): void {
   if (!enabled) return
   try {
@@ -333,6 +337,24 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             `mcp_tool=click targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''} stepIndex=${stepIndex}`,
           )
 
+          if (ref && !isValidSnapshotRef(ref)) {
+            const result = {
+              ok: false as const,
+              error: {
+                code: 'INVALID_INPUT' as const,
+                message: `Invalid ref: ${ref}. Ref must come from snapshot like e15.`,
+                retriable: false,
+                cause: undefined,
+              },
+            }
+
+            logToolResult('click', startTime, result as any, stepIndex, {})
+            return {
+              content: [{ type: 'text', text: safeStringify(summarizeToolResult(result as any)) }],
+              isError: true,
+            }
+          }
+
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
           const { result, meta } = await runWithPreActionScreenshot({
@@ -411,6 +433,24 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             options.debug,
             `mcp_tool=fill targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''} textLength=${text.length} stepIndex=${stepIndex}`,
           )
+
+          if (ref && !isValidSnapshotRef(ref)) {
+            const result = {
+              ok: false as const,
+              error: {
+                code: 'INVALID_INPUT' as const,
+                message: `Invalid ref: ${ref}. Ref must come from snapshot like e15.`,
+                retriable: false,
+                cause: undefined,
+              },
+            }
+
+            logToolResult('fill', startTime, result as any, stepIndex, {})
+            return {
+              content: [{ type: 'text', text: safeStringify(summarizeToolResult(result as any)) }],
+              isError: true,
+            }
+          }
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -498,6 +538,24 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           const startTime = Date.now()
           logToolCall('select_option', { ref, label }, stepIndex)
           writeDebug(options.debug, `mcp_tool=select_option ref=${ref} label=${label} stepIndex=${stepIndex}`)
+
+          if (!isValidSnapshotRef(ref)) {
+            const result = {
+              ok: false as const,
+              error: {
+                code: 'INVALID_INPUT' as const,
+                message: `Invalid ref: ${ref}. Ref must come from snapshot like e15.`,
+                retriable: false,
+                cause: undefined,
+              },
+            }
+
+            logToolResult('select_option', startTime, result as any, stepIndex, {})
+            return {
+              content: [{ type: 'text', text: safeStringify(summarizeToolResult(result as any)) }],
+              isError: true,
+            }
+          }
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
@@ -724,6 +782,24 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
             options.debug,
             `mcp_tool=assertElementVisible targetLength=${targetDescription.length}${ref ? ` refLength=${ref.length}` : ''} stepIndex=${stepIndex}`,
           )
+
+          if (ref && !isValidSnapshotRef(ref)) {
+            const result = {
+              ok: false as const,
+              error: {
+                code: 'INVALID_INPUT' as const,
+                message: `Invalid ref: ${ref}. Ref must come from snapshot like e15.`,
+                retriable: false,
+                cause: undefined,
+              },
+            }
+
+            logToolResult('assertElementVisible', startTime, result as any, stepIndex, {})
+            return {
+              content: [{ type: 'text', text: safeStringify(summarizeToolResult(result as any)) }],
+              isError: true,
+            }
+          }
 
           const snapshotCapturePromise = contextMode === 'snapshot' ? capturePreActionSnapshot() : Promise.resolve(undefined)
 
