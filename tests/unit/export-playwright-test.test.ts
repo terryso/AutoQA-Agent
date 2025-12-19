@@ -139,7 +139,7 @@ describe('export-playwright-test', () => {
       }
     })
 
-    it('fails export when assertion step is missing assertion IR record', async () => {
+    it('generates TODO comment when assertion step is missing assertion IR record (simple case)', async () => {
       const specPath = join(testDir, 'specs', 'test.md')
       const spec: MarkdownSpec = {
         preconditions: ['Base URL accessible'],
@@ -168,9 +168,12 @@ describe('export-playwright-test', () => {
         baseUrl: 'https://example.com',
       })
 
-      expect(result.ok).toBe(false)
-      if (!result.ok) {
-        expect(result.reason).toContain('missing assertion IR record')
+      // Should succeed with TODO comment instead of failing
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        const content = await readFile(result.exportPath, 'utf-8')
+        expect(content).toContain('// TODO: Add assertion for:')
+        expect(content).toContain('Dashboard')
       }
     })
 
@@ -246,22 +249,23 @@ describe('export-playwright-test', () => {
       }
     })
 
-    it('fails when element-targeting action is missing chosenLocator', async () => {
+    it('fails when element-targeting action is missing chosenLocator and has no fallback', async () => {
       const specPath = join(testDir, 'specs', 'test.md')
       const spec: MarkdownSpec = {
         preconditions: ['Base URL accessible'],
         steps: [
-          { index: 1, text: "Click the 'Login' button", kind: 'action' },
+          { index: 1, text: "Fill the 'Username' field with test", kind: 'action' },
         ],
       }
 
+      // fill action without chosenLocator and without fallback support
       const records: ActionRecord[] = [
         createMockRecord({
           specPath,
           stepIndex: 1,
-          toolName: 'click',
-          toolInput: { targetDescription: 'Login button' },
-          // No element/chosenLocator
+          toolName: 'fill',
+          toolInput: { targetDescription: 'Username field', textLength: 4 },
+          // No element/chosenLocator - fill doesn't support fallback
         }),
       ]
 
@@ -283,7 +287,44 @@ describe('export-playwright-test', () => {
       }
     })
 
-    it('fails when assertion step is missing assertion IR record (even if parseable)', async () => {
+    it('succeeds with fallback locator when click is missing chosenLocator but has targetDescription', async () => {
+      const specPath = join(testDir, 'specs', 'test.md')
+      const spec: MarkdownSpec = {
+        preconditions: ['Base URL accessible'],
+        steps: [
+          { index: 1, text: "Click the 'Login' button", kind: 'action' },
+        ],
+      }
+
+      const records: ActionRecord[] = [
+        createMockRecord({
+          specPath,
+          stepIndex: 1,
+          toolName: 'click',
+          toolInput: { targetDescription: 'Login button' },
+          // No element/chosenLocator but has targetDescription for fallback
+        }),
+      ]
+
+      const runId = await setupIRFile(records)
+
+      const result = await exportPlaywrightTest({
+        cwd: testDir,
+        runId,
+        specPath,
+        spec,
+        baseUrl: 'https://example.com',
+      })
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        const content = await readFile(result.exportPath, 'utf-8')
+        expect(content).toContain('click()')
+        expect(content).toContain('TODO: verify this fallback locator')
+      }
+    })
+
+    it('generates TODO comment when assertion step is missing assertion IR record', async () => {
       const specPath = join(testDir, 'specs', 'test.md')
       const spec: MarkdownSpec = {
         preconditions: ['Base URL accessible'],
@@ -312,9 +353,12 @@ describe('export-playwright-test', () => {
         baseUrl: 'https://example.com',
       })
 
-      expect(result.ok).toBe(false)
-      if (!result.ok) {
-        expect(result.reason).toContain('missing assertion IR record')
+      // Should succeed with TODO comment instead of failing
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        const content = await readFile(result.exportPath, 'utf-8')
+        expect(content).toContain('// TODO: Add assertion for:')
+        expect(content).toContain('Products')
       }
     })
 
@@ -370,6 +414,110 @@ describe('export-playwright-test', () => {
         expect(content).toContain("page.getByTestId('username').fill(username)")
         expect(content).not.toContain('standard_user')
         expect(content).not.toContain('[REDACTED]')
+      }
+    })
+
+    it('uses IR fillValue (template_var) for fill code generation', async () => {
+      const specPath = join(testDir, 'specs', 'test.md')
+      const spec: MarkdownSpec = {
+        preconditions: ['Base URL accessible'],
+        steps: [
+          { index: 1, text: "Fill the 'Username' field with standard_user", kind: 'action' },
+        ],
+      }
+
+      const records: ActionRecord[] = [
+        createMockRecord({
+          specPath,
+          stepIndex: 1,
+          toolName: 'fill',
+          toolInput: {
+            targetDescription: 'Username',
+            textLength: 13,
+            fillValue: { kind: 'template_var', name: 'USERNAME' },
+          },
+          element: {
+            fingerprint: { tagName: 'input' },
+            locatorCandidates: [],
+            chosenLocator: {
+              kind: 'getByTestId',
+              value: 'username',
+              code: "page.getByTestId('username')",
+              validation: { unique: true },
+            },
+          },
+        }),
+      ]
+
+      const runId = await setupIRFile(records)
+
+      const result = await exportPlaywrightTest({
+        cwd: testDir,
+        runId,
+        specPath,
+        spec,
+        baseUrl: 'https://example.com',
+      })
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        const content = await readFile(result.exportPath, 'utf-8')
+        expect(content).toContain("const username = getEnvVar('AUTOQA_USERNAME')")
+        expect(content).toContain("page.getByTestId('username').fill(username)")
+        // The fill code should use the env var, not the literal value
+        expect(content).not.toContain(".fill('standard_user')")
+      }
+    })
+
+    it('uses IR fillValue (literal) for fill code generation', async () => {
+      const specPath = join(testDir, 'specs', 'test.md')
+      const spec: MarkdownSpec = {
+        preconditions: ['Base URL accessible'],
+        steps: [
+          { index: 1, text: "Fill the search field with 暖场", kind: 'action' },
+        ],
+      }
+
+      const records: ActionRecord[] = [
+        createMockRecord({
+          specPath,
+          stepIndex: 1,
+          toolName: 'fill',
+          toolInput: {
+            targetDescription: 'search field',
+            textLength: 2,
+            fillValue: { kind: 'literal', value: '暖场' },
+          },
+          element: {
+            fingerprint: { tagName: 'input' },
+            locatorCandidates: [],
+            chosenLocator: {
+              kind: 'getByPlaceholder',
+              value: '输入直播名称或频道号',
+              code: "page.getByPlaceholder('输入直播名称或频道号')",
+              validation: { unique: true },
+            },
+          },
+        }),
+      ]
+
+      const runId = await setupIRFile(records)
+
+      const result = await exportPlaywrightTest({
+        cwd: testDir,
+        runId,
+        specPath,
+        spec,
+        baseUrl: 'https://example.com',
+      })
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        const content = await readFile(result.exportPath, 'utf-8')
+        expect(content).toContain("page.getByPlaceholder('输入直播名称或频道号').fill('暖场')")
+        // Should not have env vars for fill value (literal), but baseUrl always uses getEnvVar
+        expect(content).not.toContain('AUTOQA_USERNAME')
+        expect(content).not.toContain('AUTOQA_PASSWORD')
       }
     })
 
@@ -506,6 +654,56 @@ describe('export-playwright-test', () => {
         const content = await readFile(result.exportPath, 'utf-8')
         expect(content).toContain("page.getByTestId('dropdown').selectOption")
         expect(content).toContain("label: 'Option A'")
+      }
+    })
+
+    it('uses fallback locator when chosenLocator is missing for click', async () => {
+      const specPath = join(testDir, 'specs', 'test.md')
+      const spec: MarkdownSpec = {
+        preconditions: ['Base URL accessible'],
+        steps: [
+          { index: 1, text: 'Navigate to /', kind: 'action' },
+          { index: 2, text: "Click the 'Search' button", kind: 'action' },
+        ],
+      }
+
+      const records: ActionRecord[] = [
+        createMockRecord({
+          specPath,
+          stepIndex: 1,
+          toolName: 'navigate',
+          toolInput: { url: '/' },
+        }),
+        createMockRecord({
+          specPath,
+          stepIndex: 2,
+          toolName: 'click',
+          toolInput: { targetDescription: 'search button to trigger search', ref: 'e132' },
+          element: {
+            fingerprint: { tagName: 'span' },
+            locatorCandidates: [],
+            // No chosenLocator - simulating the case where no stable locator was found
+          },
+        }),
+      ]
+
+      const runId = await setupIRFile(records)
+
+      const result = await exportPlaywrightTest({
+        cwd: testDir,
+        runId,
+        specPath,
+        spec,
+        baseUrl: 'https://example.com',
+      })
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        const content = await readFile(result.exportPath, 'utf-8')
+        // Should use fallback locator with TODO comment
+        expect(content).toContain('click()')
+        expect(content).toContain('TODO: verify this fallback locator')
+        expect(content).toContain('search')
       }
     })
   })

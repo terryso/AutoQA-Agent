@@ -114,7 +114,6 @@ describe('IR Writer', () => {
         text: 'secret123',
       })
       expect(result.textLength).toBe(9)
-      expect(result.textRedacted).toBe(true)
       expect(result.text).toBeUndefined()
       expect(result.targetDescription).toBe('password field')
     })
@@ -124,7 +123,6 @@ describe('IR Writer', () => {
         targetDescription: 'Password input',
         text: 'my_secret_password_123',
       })
-      expect(result.textRedacted).toBe(true)
       expect(result.textLength).toBe(22)
       expect(result.text).toBeUndefined()
       expect(JSON.stringify(result)).not.toContain('my_secret_password_123')
@@ -135,10 +133,31 @@ describe('IR Writer', () => {
         targetDescription: 'Username input',
         text: 'admin_user',
       })
-      expect(result.textRedacted).toBe(true)
       expect(result.textLength).toBe(10)
       expect(result.text).toBeUndefined()
       expect(JSON.stringify(result)).not.toContain('admin_user')
+    })
+
+    it('should preserve fillValue in fill tool input', () => {
+      const result = redactToolInputForIR('fill', {
+        targetDescription: 'Username input',
+        text: 'admin_user',
+        fillValue: { kind: 'template_var', name: 'USERNAME' },
+      })
+      expect(result.fillValue).toEqual({ kind: 'template_var', name: 'USERNAME' })
+      expect(result.textLength).toBe(10)
+      expect(result.text).toBeUndefined()
+    })
+
+    it('should preserve literal fillValue in fill tool input', () => {
+      const result = redactToolInputForIR('fill', {
+        targetDescription: 'Search input',
+        text: '暖场',
+        fillValue: { kind: 'literal', value: '暖场' },
+      })
+      expect(result.fillValue).toEqual({ kind: 'literal', value: '暖场' })
+      expect(result.textLength).toBe(2)
+      expect(result.text).toBeUndefined()
     })
 
     it('should not redact text for non-fill tools', () => {

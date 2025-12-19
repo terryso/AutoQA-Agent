@@ -77,23 +77,54 @@ export function toSafeRelativePath(absolutePath: string, cwd: string): string {
 
 /**
  * Redact sensitive data from tool input before writing to IR.
+ * For fill actions, preserves fillValue (structured) and removes raw text.
  */
 export function redactToolInputForIR(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
-  const base = toolName === 'assertTextPresent' || toolName === 'assertElementVisible'
-    ? input
-    : redactToolInput(toolName, input)
   const result: Record<string, unknown> = {}
 
+  // For fill actions, handle fillValue specially
+  if (toolName === 'fill') {
+    for (const [key, value] of Object.entries(input)) {
+      // Preserve fillValue as-is (it's already structured and safe)
+      if (key === 'fillValue') {
+        result[key] = value
+        continue
+      }
+      // Skip raw text - we use fillValue instead
+      if (key === 'text') {
+        result.textLength = typeof value === 'string' ? value.length : 0
+        continue
+      }
+      // Truncate other string values
+      if (typeof value === 'string') {
+        result[key] = truncateString(value, 200)
+        continue
+      }
+      result[key] = value
+    }
+    return result
+  }
+
+  // For assertion tools, preserve input as-is
+  if (toolName === 'assertTextPresent' || toolName === 'assertElementVisible') {
+    for (const [key, value] of Object.entries(input)) {
+      if (typeof value === 'string') {
+        result[key] = truncateString(value, 200)
+        continue
+      }
+      result[key] = value
+    }
+    return result
+  }
+
+  // For other tools, use standard redaction
+  const base = redactToolInput(toolName, input)
   for (const [key, value] of Object.entries(base)) {
     if (typeof value === 'string') {
       result[key] = truncateString(value, 200)
       continue
     }
     result[key] = value
-  }
-
-  if (toolName === 'fill' && Object.prototype.hasOwnProperty.call(input, 'text')) {
-    result.textRedacted = true
   }
 
   return result

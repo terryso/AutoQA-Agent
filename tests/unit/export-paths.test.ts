@@ -60,23 +60,39 @@ describe('export-paths', () => {
   })
 
   describe('getExportDir', () => {
-    it('returns tests/autoqa path', () => {
+    it('returns tests/autoqa path by default', () => {
       expect(getExportDir('/project')).toBe('/project/tests/autoqa')
+    })
+
+    it('returns custom export directory when specified', () => {
+      expect(getExportDir('/project', 'custom/output')).toBe('/project/custom/output')
     })
   })
 
   describe('getExportPath', () => {
-    it('returns full export path', () => {
+    it('returns full export path with default directory', () => {
       expect(getExportPath('/project', '/project/specs/login.md')).toBe(
         '/project/tests/autoqa/specs-login.spec.ts',
+      )
+    })
+
+    it('returns full export path with custom directory', () => {
+      expect(getExportPath('/project', '/project/specs/login.md', 'custom/output')).toBe(
+        '/project/custom/output/specs-login.spec.ts',
       )
     })
   })
 
   describe('getRelativeExportPath', () => {
-    it('returns relative path without absolute prefix', () => {
+    it('returns relative path with default directory', () => {
       expect(getRelativeExportPath('/project', '/project/specs/login.md')).toBe(
         'tests/autoqa/specs-login.spec.ts',
+      )
+    })
+
+    it('returns relative path with custom directory', () => {
+      expect(getRelativeExportPath('/project', '/project/specs/login.md', 'custom/output')).toBe(
+        'custom/output/specs-login.spec.ts',
       )
     })
   })
@@ -96,15 +112,15 @@ describe('export-paths', () => {
       )
     })
 
-    it('extracts tests/autoqa pattern from unknown paths', () => {
-      expect(toSafeRelativePath('/unknown/tests/autoqa/test.spec.ts', cwd)).toBe(
-        'tests/autoqa/test.spec.ts',
+    it('extracts spec.ts filename from unknown paths', () => {
+      expect(toSafeRelativePath('/unknown/custom/output/test.spec.ts', cwd)).toBe(
+        'test.spec.ts',
       )
     })
 
     it('returns redacted path for unrecognized paths', () => {
       expect(toSafeRelativePath('/other/path/file.ts', cwd)).toBe(
-        'tests/autoqa/[redacted].spec.ts',
+        '[redacted].spec.ts',
       )
     })
   })

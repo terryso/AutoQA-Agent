@@ -43,36 +43,47 @@ export function generateExportFileName(specPath: string, cwd: string): string {
 }
 
 /**
- * Get the export directory path (tests/autoqa/).
+ * Get the export directory path.
+ * @param cwd - Current working directory
+ * @param exportDir - Custom export directory (relative to cwd), defaults to 'tests/autoqa'
  */
-export function getExportDir(cwd: string): string {
-  return resolve(cwd, 'tests', 'autoqa')
+export function getExportDir(cwd: string, exportDir?: string): string {
+  return resolve(cwd, exportDir ?? 'tests/autoqa')
 }
 
 /**
  * Get the full export file path.
+ * @param cwd - Current working directory
+ * @param specPath - Path to the spec file
+ * @param exportDir - Custom export directory (relative to cwd)
  */
-export function getExportPath(cwd: string, specPath: string): string {
-  const exportDir = getExportDir(cwd)
+export function getExportPath(cwd: string, specPath: string, exportDir?: string): string {
+  const dir = getExportDir(cwd, exportDir)
   const fileName = generateExportFileName(specPath, cwd)
-  return resolve(exportDir, fileName)
+  return resolve(dir, fileName)
 }
 
 /**
  * Get the relative export path (safe for logging, no absolute paths).
+ * @param cwd - Current working directory
+ * @param specPath - Path to the spec file
+ * @param exportDir - Custom export directory (relative to cwd)
  */
-export function getRelativeExportPath(cwd: string, specPath: string): string {
+export function getRelativeExportPath(cwd: string, specPath: string, exportDir?: string): string {
   const fileName = generateExportFileName(specPath, cwd)
-  return `tests/autoqa/${fileName}`
+  const dir = exportDir ?? 'tests/autoqa'
+  return `${dir}/${fileName}`
 }
 
 /**
  * Ensure the export directory exists.
+ * @param cwd - Current working directory
+ * @param exportDir - Custom export directory (relative to cwd)
  */
-export async function ensureExportDir(cwd: string): Promise<string> {
-  const exportDir = getExportDir(cwd)
-  await mkdir(exportDir, { recursive: true })
-  return exportDir
+export async function ensureExportDir(cwd: string, exportDir?: string): Promise<string> {
+  const dir = getExportDir(cwd, exportDir)
+  await mkdir(dir, { recursive: true })
+  return dir
 }
 
 /**
@@ -90,10 +101,10 @@ export function toSafeRelativePath(absolutePath: string, cwd: string): string {
     return absolutePath.slice(cwd.length + 1)
   }
 
-  const match = absolutePath.match(/tests\/autoqa\/[^/]+\.spec\.ts$/)
+  const match = absolutePath.match(/[^/]+\.spec\.ts$/)
   if (match) {
     return match[0]
   }
 
-  return 'tests/autoqa/[redacted].spec.ts'
+  return '[redacted].spec.ts'
 }

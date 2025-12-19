@@ -1,14 +1,19 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test'
+import { loadEnvFiles, getEnvVar } from '../../src/test-utils/autoqa-env'
 
-const baseUrl = 'https://www.saucedemo.com';
+loadEnvFiles()
+
+const baseUrl = getEnvVar('AUTOQA_BASE_URL')
+const password = getEnvVar('AUTOQA_PASSWORD')
+const username = getEnvVar('AUTOQA_USERNAME')
 
 test('saucedemo 03 cart', async ({ page }) => {
   // Step 1: Navigate to /
   await page.goto(new URL('/', baseUrl).toString());
-  // Step 2: Fill the "Username" field with standard_user
-  await page.getByPlaceholder('Username').fill('standard_user');
-  // Step 3: Fill the "Password" field with secret_sauce
-  await page.getByPlaceholder('Password').fill('secret_sauce');
+  // Step 2: Fill the "Username" field with AUTOQA_USERNAME
+  await page.getByPlaceholder('Username').fill(username);
+  // Step 3: Fill the "Password" field with AUTOQA_PASSWORD
+  await page.getByPlaceholder('Password').fill(password);
   // Step 4: Click the "Login" button
   await page.locator('#login-button').click();
   // Step 5: Verify the user is logged in and sees the inventory/products page (e.g. header shows "Products")
@@ -19,9 +24,11 @@ test('saucedemo 03 cart', async ({ page }) => {
   // Step 7: (Optional) Click "Reset App State"
   await page.locator('#reset_sidebar_link').click();
   // Step 8: Verify the cart badge is not shown (or shows 0)
-  const locator8_1 = page.locator('[data-test="shopping-cart-link"]');
-  await expect(locator8_1).toHaveCount(1);
-  await expect(locator8_1).toBeVisible();
+  const locator8_1 = page.getByText('Add to cart');
+  await expect(locator8_1.nth(0)).toBeVisible();
+  const locator8_2 = page.locator('#add-to-cart-sauce-labs-backpack');
+  await expect(locator8_2).toHaveCount(1);
+  await expect(locator8_2).toBeVisible();
   // Step 9: Click "Add to cart" for any product
   await page.locator('#add-to-cart-sauce-labs-backpack').click();
   // Step 10: Verify the button for that product changes to "Remove"
@@ -57,4 +64,4 @@ test('saucedemo 03 cart', async ({ page }) => {
   // Step 20: Verify the user returns to the inventory/products page
   const locator20_1 = page.getByText('Products');
   await expect(locator20_1.nth(0)).toBeVisible();
-});
+})

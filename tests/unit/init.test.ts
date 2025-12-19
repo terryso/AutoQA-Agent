@@ -37,6 +37,7 @@ describe('autoqa init', () => {
           maxConsecutiveErrors: 8,
           maxRetriesPerStep: 5,
         },
+        exportDir: 'tests/autoqa',
       })
     } finally {
       process.chdir(originalCwd)
@@ -116,6 +117,7 @@ describe('autoqa init', () => {
           maxConsecutiveErrors: 8,
           maxRetriesPerStep: 5,
         },
+        exportDir: 'tests/autoqa',
       })
       expect(readFileSync(exampleSpecPath, 'utf8')).toBe(customContents)
 

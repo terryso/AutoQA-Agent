@@ -10,5 +10,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "tests/autoqa/specs-polyv-01-channel-search.spec.ts", "polyv-tests/autoqa/specs-polyv-01-channel-search.spec.ts"]
 }

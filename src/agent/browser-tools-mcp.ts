@@ -143,6 +143,9 @@ function summarizeToolResult(result: { ok: boolean; data?: unknown; error?: any;
   }
 }
 
+import type { StepVarInfo } from '../runner/run-specs.js'
+import type { FillValue } from '../ir/types.js'
+
 export type CreateBrowserToolsMcpServerOptions = {
   page: Page
   baseUrl: string
@@ -153,6 +156,8 @@ export type CreateBrowserToolsMcpServerOptions = {
   logger: Logger
   onToolCall?: (toolName: string, stepIndex: number | null, isError: boolean) => void
   enableIR?: boolean
+  /** Map of stepIndex -> variables used in that step */
+  stepVarsMap?: Map<number, StepVarInfo>
 }
 
 function parseStepIndex(value: unknown): number | null {
@@ -182,6 +187,41 @@ function parseStepIndex(value: unknown): number | null {
    .optional()
 
 const DEFAULT_JPEG_QUALITY = 60
+
+/**
+ * Compute the FillValue for IR recording.
+ * - If stepVarsMap has a variable for this step, use template_var
+ * - If fingerprint indicates password field, use redacted
+ * - Otherwise use literal
+ */
+function computeFillValue(
+  stepIndex: number | null,
+  text: string,
+  fingerprint: ElementFingerprint | null | undefined,
+  stepVarsMap: Map<number, StepVarInfo> | undefined,
+): FillValue {
+  // Check if this step uses a template variable
+  if (stepIndex !== null && stepVarsMap) {
+    const stepInfo = stepVarsMap.get(stepIndex)
+    if (stepInfo && stepInfo.vars.length > 0) {
+      // Find which variable matches this fill (prefer PASSWORD/USERNAME for sensitive fields)
+      const isPasswordField = fingerprint?.typeAttr === 'password'
+      if (isPasswordField && stepInfo.vars.includes('PASSWORD')) {
+        return { kind: 'template_var', name: 'PASSWORD' }
+      }
+      // Use the first variable found in this step
+      return { kind: 'template_var', name: stepInfo.vars[0] }
+    }
+  }
+
+  // If it's a password field without a template var, redact it
+  if (fingerprint?.typeAttr === 'password') {
+    return { kind: 'redacted' }
+  }
+
+  // Otherwise store the literal value
+  return { kind: 'literal', value: text }
+}
 
 export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServerOptions) {
   let counter = 0
@@ -705,15 +745,18 @@ export function createBrowserToolsMcpServer(options: CreateBrowserToolsMcpServer
           logToolResult('fill', startTime, result as any, stepIndex, { ...meta, snapshot: snapshotMeta })
 
           if (result.ok && irRecorder.isEnabled()) {
+            const preResult = irPreActionResult as PreActionResult | null
+            const fingerprint = preResult?.fingerprint ?? null
+            const fillValue = computeFillValue(stepIndex, text, fingerprint, options.stepVarsMap)
             await irRecorder.recordAction(
               {
                 page: options.page,
                 toolName: 'fill' as IRToolName,
-                toolInput: { targetDescription, ref, text },
+                toolInput: { targetDescription, ref, text, fillValue },
                 stepIndex,
               },
               { ok: true },
-              irPreActionResult,
+              preResult,
             )
           }
 

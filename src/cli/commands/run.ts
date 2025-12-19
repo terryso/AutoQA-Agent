@@ -10,7 +10,7 @@ import { writeOutLine } from '../output.js'
 
 import { discoverMarkdownSpecs } from '../../specs/discover.js'
 import { validateRunArgs } from '../../runner/validate-run-args.js'
-import { runSpecs } from '../../runner/run-specs.js'
+import { runSpecs, type StepVarInfo } from '../../runner/run-specs.js'
 import type { ParsedSpec } from '../../runner/run-specs.js'
 import { parseMarkdownSpec, classifyStepKind } from '../../markdown/parse-markdown-spec.js'
 import { renderMarkdownTemplate } from '../../markdown/template.js'
@@ -21,6 +21,38 @@ import { probeAgentSdkAuth, type AgentSdkAuthProbeResult } from '../../auth/prob
 import { createLogger, ensureArtifactDir, getArtifactRootPath } from '../../logging/index.js'
 import { readConfig, resolveGuardrails } from '../../config/read.js'
 import { loadEnvFiles } from '../../env/load-env.js'
+
+const TEMPLATE_VAR_PATTERN = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g
+
+function extractTemplateVars(text: string): string[] {
+  const vars: string[] = []
+  let match: RegExpExecArray | null
+  const pattern = new RegExp(TEMPLATE_VAR_PATTERN.source, 'g')
+  while ((match = pattern.exec(text)) !== null) {
+    const varName = (match[1] ?? '').trim()
+    if (varName && !vars.includes(varName)) {
+      vars.push(varName)
+    }
+  }
+  return vars
+}
+
+function parseStepVarsFromRawContent(rawContent: string): Map<number, StepVarInfo> {
+  const stepVars = new Map<number, StepVarInfo>()
+  const stepsMatch = rawContent.match(/##\s*Steps[\s\S]*?(?=##|$)/i)
+  if (!stepsMatch) return stepVars
+
+  const stepsSection = stepsMatch[0]
+  const stepPattern = /^\s*(\d+)[.)\s]+(.+)$/gm
+  let match: RegExpExecArray | null
+  while ((match = stepPattern.exec(stepsSection)) !== null) {
+    const stepIndex = parseInt(match[1], 10)
+    const rawText = match[2].trim()
+    const vars = extractTemplateVars(rawText)
+    stepVars.set(stepIndex, { vars, rawText })
+  }
+  return stepVars
+}
 
 function sanitizeBaseUrlForLog(baseUrl: string): string {
   try {
@@ -257,7 +289,8 @@ export function registerRunCommand(program: Command) {
           })),
         }
 
-        parsedSpecs.push({ specPath, spec: finalSpec, rawContent: rawExpandedContentForExport })
+        const stepVarsMap = parseStepVarsFromRawContent(rawExpandedContentForExport)
+        parsedSpecs.push({ specPath, spec: finalSpec, rawContent: rawExpandedContentForExport, stepVarsMap })
       }
 
       if (validated.value.debug) {
@@ -305,12 +338,14 @@ export function registerRunCommand(program: Command) {
       const runResult = await runSpecs({
         runId,
         baseUrl: validated.value.baseUrl,
+        loginBaseUrl: validated.value.loginBaseUrl,
         headless: validated.value.headless,
         debug: validated.value.debug,
         specs: parsedSpecs,
         logger,
         cwd,
-        onSpec: async ({ runId, baseUrl, specPath, spec, page, logger }) => {
+        exportDir: configResult.config.exportDir,
+        onSpec: async ({ runId, baseUrl, specPath, spec, page, logger, stepVarsMap }) => {
           await runAgent({
             runId,
             baseUrl,
@@ -321,6 +356,7 @@ export function registerRunCommand(program: Command) {
             cwd,
             logger,
             guardrails,
+            stepVarsMap,
           })
         },
       })

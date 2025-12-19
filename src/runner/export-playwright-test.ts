@@ -6,7 +6,7 @@
 
 import { writeFile } from 'node:fs/promises'
 
-import type { ActionRecord } from '../ir/types.js'
+import type { ActionRecord, FillValue } from '../ir/types.js'
 import type { MarkdownSpec, MarkdownSpecStep } from '../markdown/spec-types.js'
 import {
   ensureExportDir,
@@ -44,6 +44,8 @@ export type ExportOptions = {
   loginBaseUrl?: string
   /** Raw (unrendered) spec content for extracting {{VAR}} placeholders */
   rawSpecContent?: string
+  /** Custom export directory (relative to cwd), defaults to 'tests/autoqa' */
+  exportDir?: string
 }
 
 /**
@@ -66,6 +68,71 @@ function extractTemplateVars(text: string): string[] {
     }
   }
   return vars
+}
+
+function buildTextExpressionFromRawValue(rawValue: string): { expr: string; envVars: Set<string>; needsLoginBaseUrl: boolean } | null {
+  const exactVarMatch = rawValue.match(/^\{\{\s*([A-Z0-9_]+)\s*\}\}\s*$/)
+  if (exactVarMatch) {
+    const varName = (exactVarMatch[1] ?? '').trim()
+    if (!varName) return null
+
+    if (varName === 'BASE_URL') {
+      return { expr: 'baseUrl', envVars: new Set<string>(), needsLoginBaseUrl: false }
+    }
+    if (varName === 'LOGIN_BASE_URL') {
+      return { expr: 'loginBaseUrl', envVars: new Set<string>(), needsLoginBaseUrl: true }
+    }
+    return { expr: varName.toLowerCase(), envVars: new Set<string>([varName]), needsLoginBaseUrl: false }
+  }
+
+  const envVars = new Set<string>()
+  const parts: string[] = []
+  let needsLoginBaseUrl = false
+  let hasBaseUrlVar = false
+
+  const pattern = new RegExp(TEMPLATE_VAR_PATTERN.source, 'g')
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(rawValue)) !== null) {
+    const fullMatch = match[0] ?? ''
+    const varName = (match[1] ?? '').trim()
+    const start = match.index
+    const end = start + fullMatch.length
+
+    if (start > lastIndex) {
+      parts.push(rawValue.slice(lastIndex, start))
+    }
+
+    if (varName) {
+      if (varName === 'BASE_URL') {
+        hasBaseUrlVar = true
+        parts.push('${baseUrl}')
+      } else if (varName === 'LOGIN_BASE_URL') {
+        needsLoginBaseUrl = true
+        parts.push('${loginBaseUrl}')
+      } else {
+        envVars.add(varName)
+        parts.push('${' + varName.toLowerCase() + '}')
+      }
+    } else {
+      parts.push(fullMatch)
+    }
+
+    lastIndex = end
+  }
+
+  if (lastIndex < rawValue.length) {
+    parts.push(rawValue.slice(lastIndex))
+  }
+
+  if (envVars.size === 0 && !needsLoginBaseUrl && !hasBaseUrlVar) return null
+
+  const templateBody = parts
+    .join('')
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+
+  return { expr: `\`${templateBody}\``, envVars, needsLoginBaseUrl }
 }
 
 /**
@@ -196,12 +263,32 @@ function parseLoginFormFieldsAssertion(stepText: string): string[] | null {
 }
 
 /**
- * Parse a fill step to extract the target and value.
- * Supports formats like:
- * - "Fill the 'Username' field with standard_user"
- * - "Fill 'Username' with standard_user"
- * - "在 'Username' 字段输入 standard_user"
+ * Generate fill code from IR fillValue.
+ * Returns null if fillValue is redacted (cannot generate code).
  */
+function generateFillCodeFromIR(
+  locatorCode: string,
+  fillValue: FillValue,
+): { code: string; needs?: StepNeeds } | null {
+  if (fillValue.kind === 'template_var') {
+    const varName = fillValue.name
+    const jsVarName = varName.toLowerCase()
+    return {
+      code: `  await ${locatorCode}.fill(${jsVarName});`,
+      needs: { envVars: new Set([varName]) },
+    }
+  }
+
+  if (fillValue.kind === 'literal') {
+    return {
+      code: `  await ${locatorCode}.fill('${escapeString(fillValue.value)}');`,
+    }
+  }
+
+  // fillValue.kind === 'redacted' - cannot generate code
+  return null
+}
+
 function parseFillStep(stepText: string): { target: string; value: string } | null {
   const patterns = [
     /^fill\s+(?:the\s+)?["']?([^"']+)["']?\s+(?:field\s+)?with\s+(.+)$/i,
@@ -292,6 +379,7 @@ function parseAssertionStep(stepText: string): { type: 'text' | 'element'; value
 
   // Text presence patterns
   const textPatterns = [
+    /^(?:verify|assert)\s+(?:that\s+)?(?:the\s+)?page\s+(?:shows|contains|displays)\s+(?:text\s+)?["']?([^"']+)["']?/i,
     /^(?:verify|assert)\s+(?:that\s+)?(?:the\s+)?page\s+(?:shows|contains|displays)\s+["']?([^"']+)["']?/i,
     /^验证\s*(?:页面)?(?:显示|包含)\s*["']?([^"']+)["']?/i,
     /^断言\s*(?:页面)?(?:显示|包含)\s*["']?([^"']+)["']?/i,
@@ -327,6 +415,76 @@ function escapeString(str: string): string {
 
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Generate a fallback locator from targetDescription when chosenLocator is missing.
+ * Returns a locator code string or null if unable to generate.
+ */
+function generateFallbackLocator(record: ActionRecord): { code: string; isFallback: true } | null {
+  const targetDesc = record.toolInput?.targetDescription as string | undefined
+  if (!targetDesc) return null
+
+  const descLower = targetDesc.toLowerCase()
+
+  // Try to extract a meaningful name from the description
+  // Common patterns: "search button", "login button", "submit button", etc.
+  if (descLower.includes('button')) {
+    // Extract the button name (text before "button")
+    const match = targetDesc.match(/^(.+?)\s*button/i)
+    if (match) {
+      const buttonName = match[1].trim()
+      if (buttonName) {
+        return {
+          code: `page.getByRole('button', { name: /${escapeRegExp(buttonName)}/i })`,
+          isFallback: true,
+        }
+      }
+    }
+    // Fallback to role button without name
+    return {
+      code: `page.getByRole('button')`,
+      isFallback: true,
+    }
+  }
+
+  // Try to extract link name
+  if (descLower.includes('link')) {
+    const match = targetDesc.match(/^(.+?)\s*link/i)
+    if (match) {
+      const linkName = match[1].trim()
+      if (linkName) {
+        return {
+          code: `page.getByRole('link', { name: /${escapeRegExp(linkName)}/i })`,
+          isFallback: true,
+        }
+      }
+    }
+  }
+
+  // Try to use fingerprint textSnippet if available
+  const textSnippet = record.element?.fingerprint?.textSnippet
+  if (textSnippet) {
+    return {
+      code: `page.getByText('${escapeString(textSnippet)}')`,
+      isFallback: true,
+    }
+  }
+
+  // Last resort: use getByText with the target description (cleaned up)
+  // Remove common suffixes like "button", "link", "element", etc.
+  const cleanedDesc = targetDesc
+    .replace(/\s*(button|link|element|textbox|input|field|to trigger.*|to submit.*|to search.*)$/i, '')
+    .trim()
+
+  if (cleanedDesc) {
+    return {
+      code: `page.getByText(/${escapeRegExp(cleanedDesc)}/i)`,
+      isFallback: true,
+    }
+  }
+
+  return null
 }
 
 /**
@@ -374,7 +532,7 @@ function generateStepCode(
   stepVarInfo?: { vars: string[]; rawText: string },
 ): { code: string; error?: string; needs?: StepNeeds } {
   const stepText = step.text
-  const stepVars = stepVarInfo?.vars ?? []
+  const stepVars = stepVarInfo?.vars ? [...stepVarInfo.vars] : []
 
   // Handle assertions
   if (step.kind === 'assertion') {
@@ -386,19 +544,32 @@ function generateStepCode(
     )
 
     if (assertionRecords.length === 0) {
+      // No assertion IR record - generate a TODO comment instead of failing
+      // This happens when agent verified via snapshot but didn't call assertion tools
       return {
-        code: '',
-        error: `Assertion step ${step.index} missing assertion IR record`,
+        code: `  // TODO: Add assertion for: ${escapeString(stepText)}`,
       }
     }
 
     const parts: string[] = []
+    const needsEnvVars = new Set<string>()
+    let needsLoginBaseUrl = false
+
+    for (const v of stepVars) {
+      if (v !== 'BASE_URL' && v !== 'LOGIN_BASE_URL') needsEnvVars.add(v)
+      if (v === 'LOGIN_BASE_URL') needsLoginBaseUrl = true
+    }
+
     let i = 0
     for (const record of assertionRecords) {
       i += 1
       if (record.toolName === 'assertTextPresent') {
+        const rawAssertion = stepVarInfo?.rawText ? parseAssertionStep(stepVarInfo.rawText) : null
+        const rawValue = rawAssertion?.type === 'text' ? rawAssertion.value : null
+        const rawExpr = rawValue ? buildTextExpressionFromRawValue(rawValue) : null
+
         const text = typeof record.toolInput?.text === 'string' ? String(record.toolInput.text) : ''
-        if (!text) {
+        if (!text && !rawExpr) {
           return {
             code: '',
             error: `Assertion step ${step.index} missing text in IR`,
@@ -410,12 +581,24 @@ function generateStepCode(
           ? visibleNthRaw
           : undefined
 
-        if (typeof visibleNth === 'number') {
-          const locatorVar = `locator${step.index}_${i}`
-          parts.push(`  const ${locatorVar} = page.getByText('${escapeString(text)}');`)
-          parts.push(`  await expect(${locatorVar}.nth(${visibleNth})).toBeVisible();`)
+        if (rawExpr) {
+          rawExpr.envVars.forEach((v) => needsEnvVars.add(v))
+          if (rawExpr.needsLoginBaseUrl) needsLoginBaseUrl = true
+          if (typeof visibleNth === 'number') {
+            const locatorVar = `locator${step.index}_${i}`
+            parts.push(`  const ${locatorVar} = page.getByText(${rawExpr.expr});`)
+            parts.push(`  await expect(${locatorVar}.nth(${visibleNth})).toBeVisible();`)
+          } else {
+            parts.push(`  await expect(page.getByText(${rawExpr.expr}).first()).toBeVisible();`)
+          }
         } else {
-          parts.push(`  await expect(page.getByText('${escapeString(text)}').first()).toBeVisible();`)
+          if (typeof visibleNth === 'number') {
+            const locatorVar = `locator${step.index}_${i}`
+            parts.push(`  const ${locatorVar} = page.getByText('${escapeString(text)}');`)
+            parts.push(`  await expect(${locatorVar}.nth(${visibleNth})).toBeVisible();`)
+          } else {
+            parts.push(`  await expect(page.getByText('${escapeString(text)}').first()).toBeVisible();`)
+          }
         }
         continue
       }
@@ -436,12 +619,51 @@ function generateStepCode(
       }
     }
 
-    return { code: parts.join('\n') }
+    const needs: StepNeeds = {}
+    if (needsEnvVars.size > 0) needs.envVars = needsEnvVars
+    if (needsLoginBaseUrl) needs.loginBaseUrl = true
+    return { code: parts.join('\n'), needs }
   }
 
   // Handle navigate
   const navigatePath = parseNavigateStep(stepText)
   if (navigatePath !== null) {
+    const rawNavigatePath = stepVarInfo?.rawText ? parseNavigateStep(stepVarInfo.rawText) : null
+    if (rawNavigatePath) {
+      const rawVarMatch = rawNavigatePath.match(/^\{\{\s*([A-Z0-9_]+)\s*\}\}(.*)$/)
+      if (rawVarMatch) {
+        const varName = (rawVarMatch[1] ?? '').trim()
+        const suffix = (rawVarMatch[2] ?? '').trim()
+
+        if (varName === 'BASE_URL') {
+          if (!suffix) {
+            return { code: '  await page.goto(baseUrl);' }
+          }
+          return { code: `  await page.goto(new URL('${escapeString(suffix)}', baseUrl).toString());` }
+        }
+
+        if (varName === 'LOGIN_BASE_URL') {
+          if (!suffix) {
+            return { code: '  await page.goto(loginBaseUrl);', needs: { loginBaseUrl: true } }
+          }
+          return {
+            code: `  await page.goto(new URL('${escapeString(suffix)}', loginBaseUrl).toString());`,
+            needs: { loginBaseUrl: true },
+          }
+        }
+
+        const jsVarName = varName.toLowerCase()
+        const needsVars = new Set<string>([varName])
+        if (!suffix) {
+          return { code: `  await page.goto(${jsVarName});`, needs: { envVars: needsVars } }
+        }
+        return {
+          code: `  await page.goto(new URL('${escapeString(suffix)}', ${jsVarName}).toString());`,
+          needs: { envVars: needsVars },
+        }
+      }
+    }
+
     if (navigatePath.startsWith('http')) {
       const relFromBase = extractRelativeFromAbsolute(navigatePath, baseUrl)
       if (relFromBase !== null) {
@@ -464,7 +686,45 @@ function generateStepCode(
     return { code: `  await page.goto(new URL('${escapeString(navigatePath)}', baseUrl).toString());` }
   }
 
-  // Handle fill - must use IR chosenLocator
+  // Handle fill - prefer IR fillValue, fallback to parseFillStep
+  const fillRecord = records.find((r) => r.stepIndex === step.index && r.toolName === 'fill' && r.outcome.ok)
+  if (fillRecord && hasValidChosenLocator(fillRecord)) {
+    const locatorCode = fillRecord.element!.chosenLocator!.code
+    const irFillValue = fillRecord.toolInput?.fillValue as FillValue | undefined
+
+    // Use IR fillValue if available (new format)
+    if (irFillValue) {
+      const fillCodeResult = generateFillCodeFromIR(locatorCode, irFillValue)
+      if (fillCodeResult) {
+        return fillCodeResult
+      }
+    }
+
+    // Fallback to stepVars from raw spec (legacy support)
+    if (stepVars.length > 0) {
+      const varName = stepVars[0]
+      const jsVarName = varName.toLowerCase()
+      return {
+        code: `  await ${locatorCode}.fill(${jsVarName});`,
+        needs: { envVars: new Set(stepVars) },
+      }
+    }
+
+    // Fallback to parseFillStep (legacy support)
+    const fillParsed = parseFillStep(stepText)
+    if (fillParsed) {
+      return {
+        code: `  await ${locatorCode}.fill('${escapeString(fillParsed.value)}');`,
+      }
+    }
+
+    // If we have a fill record but can't determine value, generate TODO
+    return {
+      code: `  await ${locatorCode}.fill(''); // TODO: fill value not captured`,
+    }
+  }
+
+  // Legacy: Handle fill via parseFillStep when no IR record
   const fillParsed = parseFillStep(stepText)
   if (fillParsed) {
     const record = findMatchingRecord(step, records)
@@ -476,10 +736,7 @@ function generateStepCode(
     }
 
     const locatorCode = record.element!.chosenLocator!.code
-
-    // If this step has variables from raw spec, use them
     if (stepVars.length > 0) {
-      // Use the first variable found in this step for the fill value
       const varName = stepVars[0]
       const jsVarName = varName.toLowerCase()
       return {
@@ -488,26 +745,40 @@ function generateStepCode(
       }
     }
 
-    const fillValue = fillParsed.value
     return {
-      code: `  await ${locatorCode}.fill('${escapeString(fillValue)}');`,
+      code: `  await ${locatorCode}.fill('${escapeString(fillParsed.value)}');`,
     }
   }
 
-  // Handle click - must use IR chosenLocator
+  // Handle click - prefer IR chosenLocator, fallback to targetDescription
   const clickTarget = parseClickStep(stepText)
   if (clickTarget) {
     const record = findMatchingRecord(step, records)
-    if (!record || !hasValidChosenLocator(record)) {
+    if (!record) {
       return {
         code: '',
-        error: `Click action at step ${step.index} missing valid chosenLocator`,
+        error: `Click action at step ${step.index} missing IR record`,
       }
     }
 
-    const locatorCode = record.element!.chosenLocator!.code
+    if (hasValidChosenLocator(record)) {
+      const locatorCode = record.element!.chosenLocator!.code
+      return {
+        code: `  await ${locatorCode}.click();`,
+      }
+    }
+
+    // Try fallback locator from targetDescription
+    const fallback = generateFallbackLocator(record)
+    if (fallback) {
+      return {
+        code: `  await ${fallback.code}.click(); // TODO: verify this fallback locator`,
+      }
+    }
+
     return {
-      code: `  await ${locatorCode}.click();`,
+      code: '',
+      error: `Click action at step ${step.index} missing valid chosenLocator`,
     }
   }
 
@@ -556,29 +827,47 @@ function generateStepCode(
       }
     }
 
-    if (record.toolName === 'click' && hasValidChosenLocator(record)) {
-      return { code: `  await ${record.element!.chosenLocator!.code}.click();` }
+    if (record.toolName === 'click') {
+      if (hasValidChosenLocator(record)) {
+        return { code: `  await ${record.element!.chosenLocator!.code}.click();` }
+      }
+      // Try fallback locator
+      const fallback = generateFallbackLocator(record)
+      if (fallback) {
+        return { code: `  await ${fallback.code}.click(); // TODO: verify this fallback locator` }
+      }
     }
 
     if (record.toolName === 'fill' && hasValidChosenLocator(record)) {
-      // For fill, we need to get the value from spec text, not IR (IR is redacted)
-      const parsed = parseFillStep(stepText)
-      if (parsed) {
-        // If this step has variables from raw spec, use them
-        if (stepVars.length > 0) {
-          const varName = stepVars[0]
-          const jsVarName = varName.toLowerCase()
-          return {
-            code: `  await ${record.element!.chosenLocator!.code}.fill(${jsVarName});`,
-            needs: { envVars: new Set(stepVars) },
-          }
-        }
+      const locatorCode = record.element!.chosenLocator!.code
+      const irFillValue = record.toolInput?.fillValue as FillValue | undefined
 
-        const fillValue = parsed.value
-        if (fillValue) {
-          return { code: `  await ${record.element!.chosenLocator!.code}.fill('${escapeString(fillValue)}');` }
+      // Use IR fillValue if available (new format)
+      if (irFillValue) {
+        const fillCodeResult = generateFillCodeFromIR(locatorCode, irFillValue)
+        if (fillCodeResult) {
+          return fillCodeResult
         }
       }
+
+      // Fallback to stepVars from raw spec
+      if (stepVars.length > 0) {
+        const varName = stepVars[0]
+        const jsVarName = varName.toLowerCase()
+        return {
+          code: `  await ${locatorCode}.fill(${jsVarName});`,
+          needs: { envVars: new Set(stepVars) },
+        }
+      }
+
+      // Fallback to parseFillStep
+      const parsed = parseFillStep(stepText)
+      if (parsed?.value) {
+        return { code: `  await ${locatorCode}.fill('${escapeString(parsed.value)}');` }
+      }
+
+      // Generate TODO if value unknown
+      return { code: `  await ${locatorCode}.fill(''); // TODO: fill value not captured` }
     }
 
     if (record.toolName === 'select_option' && hasValidChosenLocator(record)) {
@@ -622,6 +911,7 @@ function generateTestFileContent(
   baseUrl: string,
   loginBaseUrl?: string,
   rawSpecContent?: string,
+  exportDir?: string,
 ): { content: string; errors: string[] } {
   const errors: string[] = []
   const stepCodes: string[] = []
@@ -654,8 +944,14 @@ function generateTestFileContent(
     ?.replace(/\.md$/i, '')
     ?.replace(/-/g, ' ') ?? 'Exported Test'
 
+  // Calculate relative import path from export directory to src/test-utils/autoqa-env
+  const exportDirResolved = exportDir ?? 'tests/autoqa'
+  const depth = exportDirResolved.split('/').filter(Boolean).length
+  const relativePrefix = depth > 0 ? '../'.repeat(depth) : './'
+  const autoqaEnvImport = `${relativePrefix}src/test-utils/autoqa-env`
+
   const content = `import { test, expect } from '@playwright/test'
-import { loadEnvFiles, getEnvVar } from './autoqa-env'
+import { loadEnvFiles, getEnvVar } from '${autoqaEnvImport}'
 
 loadEnvFiles()
 
@@ -673,7 +969,7 @@ ${stepCodes.join('\n')}
  * Export a Playwright test file from IR and spec.
  */
 export async function exportPlaywrightTest(options: ExportOptions): Promise<ExportResult> {
-  const { cwd, runId, specPath, spec, baseUrl, loginBaseUrl, rawSpecContent } = options
+  const { cwd, runId, specPath, spec, baseUrl, loginBaseUrl, rawSpecContent, exportDir } = options
 
   // Read IR records for this spec
   let records: ActionRecord[]
@@ -710,7 +1006,7 @@ export async function exportPlaywrightTest(options: ExportOptions): Promise<Expo
   }
 
   // Generate test file content
-  const { content, errors } = generateTestFileContent(specPath, spec, records, baseUrl, loginBaseUrl, rawSpecContent)
+  const { content, errors } = generateTestFileContent(specPath, spec, records, baseUrl, loginBaseUrl, rawSpecContent, exportDir)
 
   if (errors.length > 0) {
     return {
@@ -721,7 +1017,7 @@ export async function exportPlaywrightTest(options: ExportOptions): Promise<Expo
 
   // Ensure export directory exists
   try {
-    await ensureExportDir(cwd)
+    await ensureExportDir(cwd, exportDir)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return {
@@ -731,8 +1027,8 @@ export async function exportPlaywrightTest(options: ExportOptions): Promise<Expo
   }
 
   // Write the test file
-  const exportPath = getExportPath(cwd, specPath)
-  const relativePath = getRelativeExportPath(cwd, specPath)
+  const exportPath = getExportPath(cwd, specPath, exportDir)
+  const relativePath = getRelativeExportPath(cwd, specPath, exportDir)
 
   try {
     await writeFile(exportPath, content, 'utf-8')

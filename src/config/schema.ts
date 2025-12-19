@@ -12,6 +12,7 @@ export const autoqaConfigSchema = z
   .object({
     schemaVersion: z.number().int().min(1),
     guardrails: guardrailsSchema.optional(),
+    exportDir: z.string().optional(),
   })
   .strict()
 

@@ -87,6 +87,15 @@ export type IRToolName =
   | 'assertElementVisible'
 
 /**
+ * Fill value representation for IR storage.
+ * Supports both template variables (e.g., {{USERNAME}}) and literal values.
+ */
+export type FillValue =
+  | { kind: 'template_var'; name: string }
+  | { kind: 'literal'; value: string }
+  | { kind: 'redacted' }
+
+/**
  * Outcome of a tool execution.
  */
 export type ActionOutcome = {
@@ -98,8 +107,12 @@ export type ActionOutcome = {
 /**
  * Redacted tool input for IR storage.
  * Sensitive data (like fill text) is replaced with length or markers.
+ * For fill actions, use fillValue field instead of text.
  */
-export type RedactedToolInput = Record<string, unknown>
+export type RedactedToolInput = Record<string, unknown> & {
+  /** Structured fill value for fill actions */
+  fillValue?: FillValue
+}
 
 /**
  * A single action record in the IR.

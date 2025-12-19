@@ -3,6 +3,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { Page } from 'playwright'
 
 import type { MarkdownSpec } from '../markdown/spec-types.js'
+import type { StepVarInfo } from '../runner/run-specs.js'
 import { createBrowserToolsMcpServer } from './browser-tools-mcp.js'
 import type { Logger } from '../logging/index.js'
 import { redactToolInput } from '../logging/index.js'
@@ -29,6 +30,8 @@ export type RunAgentOptions = {
   cwd?: string
   logger: Logger
   guardrails?: Required<Guardrails>
+  /** Map of stepIndex -> variables used in that step */
+  stepVarsMap?: Map<number, StepVarInfo>
 }
 
 export const RUN_AGENT_ALLOWED_TOOLS = [
@@ -190,6 +193,7 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
     cwd: options.cwd,
     specPath: options.specPath,
     logger: options.logger,
+    stepVarsMap: options.stepVarsMap,
   })
 
   writeDebug(options.debug, 'mcp=browser (navigate/click/fill/scroll/wait)')

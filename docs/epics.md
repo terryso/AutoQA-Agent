@@ -27,6 +27,8 @@ FR9: 稳定定位器沉淀：当 Agent 成功点击/填表某个元素时，系�
 FR10: 提供结构化页面表示：系统应支持获取页面的可访问性结构化快照（AX/ARIA snapshot），作为比截图更高效的页面理解输入，用于元素定位、自愈与调试。
 FR11: 提供可回放调试产物：系统应支持按 spec 录制 Playwright trace（含网络/DOM/操作时间线），并将 trace 作为运行产物落盘，便于失败复现与调试。
 FR12: 环境与测试数据配置：支持按环境加载（如 `.env.test`/`.env.prod`）并为 spec 提供可替换变量（例如 `BASE_URL`/`LOGIN_BASE_URL`），同时提供不在 Markdown 用例中硬编码敏感信息（如账号/密码）的机制。
+FR13: Playwright Test 导出用例支持“登录态复用/会话持久化”：仅当 Markdown spec 的 `## Preconditions` 包含严格声明 `Auth: required|none` 且值为 `required` 时，导出的用例才启用 `storageState`；专门验证登录流程的用例必须在**未预置登录态**下运行。
+FR14: Markdown spec 支持“可复用步骤库 / include”：步骤列表中允许通过 `include: <name>` 引用外部步骤文件（例如 `include: login`），以避免 02-05 这类用例重复维护相同的登录步骤。
 
 ### NonFunctional Requirements
 
@@ -64,6 +66,8 @@ FR9: Epic 4 - 运行时 locator 候选验证与沉淀
 FR10: Epic 2 - 结构化快照（AX/ARIA snapshot）
 FR11: Epic 2 - Playwright trace 录制与落盘
 FR12: Epic 5 - 环境与测试数据配置（多环境 + 账号/密码等）
+FR13: Epic 6 - Playwright Test 导出用例的登录态复用/会话持久化
+FR14: Epic 2 - Markdown include 可复用步骤库
 
 ## Epic List
 
@@ -275,6 +279,12 @@ FR12: Epic 5 - 环境与测试数据配置（多环境 + 账号/密码等）
  **Then** 系统应抽取前置条件与步骤列表，生成结构化的 Task Context（可用于 Agent 推理）
  **And** 当 Markdown 不满足最低结构时，应以退出码 `2` 失败并指出缺失的结构元素
  
+### Story 2.10: 支持 include 可复用步骤库（例如 `include: login`）
+
+**FRs covered:** FR14
+
+Tech Spec: `docs/sprint-artifacts/2-10-markdown-include-reusable-step-library.md`
+
 ### Story 2.4: 实现 Runner（按 spec 生命周期创建 Browser/Context/Page）
  
  As a 开发者,
@@ -509,4 +519,95 @@ so that 我可以把通过的用例沉淀为稳定的回归测试并接入 CI。
 **Given** 导出的测试文件被执行
 **When** 使用 Playwright Test 运行该文件
 **Then** 测试应不依赖 Agent、不依赖会话内 `ref`，仅依赖导出的稳定 locator 与显式断言
+
+### Story 4.3: 在 IR 中记录 `navigate` 的占位符语义（`urlValue`/`navigateValue`），导出时优先使用
+
+As a QA 工程师,
+I want `navigate` 动作在写入 IR 时保留“占位符语义”（例如 `{{LOGIN_BASE_URL}}/v3/login/`）而不仅是最终的绝对 URL，
+So that 导出 `@playwright/test` 时可以统一使用 `getEnvVar('AUTOQA_...')` 读取环境变量，而不是依赖 raw spec 解析或额外透传多个 baseUrl 参数。
+
+**FRs covered:** FR8, FR12
+
+**Design Notes:**
+
+- 新增结构化字段（示例命名）：`toolInput.urlValue`（或 `navigateValue`），用于表达 URL 的来源
+- 支持最小可用格式（覆盖当前主要用例）：
+  - `template_var`: `{ kind: 'template_var', name: 'LOGIN_BASE_URL', suffix: '/v3/login/' }`
+  - `literal`: `{ kind: 'literal', value: 'https://example.com/path' }`
+- 可选扩展（后续迭代）：支持多个变量拼接（template string）或更复杂的 URL 组合
+- 保持向后兼容：旧 IR 只有 `toolInput.url` 的情况下，导出仍可 fallback（例如继续使用 rawSpecContent 或 absolute url）
+
+**Acceptance Criteria:**
+
+**Given** spec 中存在步骤 `Navigate to {{LOGIN_BASE_URL}}/v3/login/`
+**When** `autoqa run` 执行该步骤并写入 IR
+**Then** `navigate` 的 IR 记录必须包含结构化 `urlValue={ kind: 'template_var', name: 'LOGIN_BASE_URL', suffix: '/v3/login/' }`
+**And** 仍可保留 `toolInput.url`（最终绝对 URL）用于调试与回放
+
+**Given** 运行结束后导出 `@playwright/test`
+**When** exporter 处理该 `navigate` 记录
+**Then** 生成的代码必须使用 `const loginBaseUrl = getEnvVar('AUTOQA_LOGIN_BASE_URL')`
+**And** 使用 `await page.goto(new URL('/v3/login/', loginBaseUrl).toString())`，而不是写死域名
+
+**Given** spec 中存在步骤 `Navigate to {{SOME_BASE_URL}}/path`
+**When** 执行并导出
+**Then** 导出的代码必须声明 `const some_base_url = getEnvVar('AUTOQA_SOME_BASE_URL')`
+**And** 使用 `new URL('/path', some_base_url)` 拼接导航
+
+**Given** 用户使用旧版本产生的 IR（没有 `urlValue`）
+**When** exporter 读取该 IR
+**Then** 导出流程必须保持可用（不因缺少 `urlValue` 而失败），并采用既有 fallback 策略生成可执行代码
+
+
+## Epic 6: 导出用例的登录态复用与执行加速（Playwright Test Suite Optimization）
+
+用户完成该 Epic 后，运行 `@playwright/test` 导出的用例时可在**同一次 run** 内复用登录态（避免每个用例重复登录），同时保留默认的隔离性（每用例独立 context）。是否启用登录态复用由 Markdown spec 的 `## Preconditions` 声明驱动；登录用例本身不使用预置登录态。
+
+**FRs covered:** FR13
+
+### Story 6.1: 生成并复用 storageState（登录一次）
+
+As a QA 工程师,
+I want 在运行 Playwright 测试前自动完成一次登录并生成 `storageState` 文件，
+So that 后续需要登录态的用例可以直接复用该状态而不是每条用例都重新登录。
+
+**Acceptance Criteria:**
+
+**Given** 已配置 `AUTOQA_BASE_URL`、`AUTOQA_USERNAME`、`AUTOQA_PASSWORD`
+**When** 运行 `npx playwright test`
+**Then** 测试框架应在 run 开始前生成可复用的 `storageState` 文件（例如存放于 `tests/autoqa/.auth/storageState.json` 或等效路径）
+**And** 生成过程应包含一次真实登录流程，并在失败时给出可定位的错误信息（包含失败步骤与建议）
+
+### Story 6.2: 用例可声明是否需要登录态（默认可控）
+
+As a QA 工程师,
+I want 在 Markdown spec 的 `## Preconditions` 通过严格格式声明是否需要登录态（`Auth: required|none`），
+So that Preconditions 不再只是文案，而是会影响导出用例的执行策略（是否启用 `storageState`）。
+
+**Acceptance Criteria:**
+
+**Given** 某个 spec 的 Preconditions 包含一条列表项 `Auth: required`
+**When** 该 spec 被导出为 `@playwright/test`
+**Then** 导出的 `.spec.ts` 应启用预置 `storageState`
+
+**Given** 某个 spec 的 Preconditions 包含一条列表项 `Auth: none`
+**When** 该 spec 被导出为 `@playwright/test`
+**Then** 导出的 `.spec.ts` 不应加载 `storageState`，并以未登录状态启动
+
+**Given** 某个 spec 的 Preconditions 中存在 `Auth:` 但值不是 `required` 或 `none`
+**When** 该 spec 被导出为 `@playwright/test`
+**Then** 导出应失败并给出可理解的错误信息（指出非法值与允许值）
+
+### Story 6.3: 登录用例例外（必须在未预置登录态下运行）
+
+As a QA 工程师,
+I want 专门验证“登录流程”的用例不使用预置登录态，
+So that 登录功能本身能被真实验证（而不是被缓存状态绕过）。
+
+**Acceptance Criteria:**
+
+**Given** 用例为“登录流程验证”类型（例如 spec 名称/标签/元数据声明为 login）
+**When** 运行该用例
+**Then** 测试必须在未登录状态开始，并显式执行登录步骤
+**And** 用例完成后应验证登录成功的可观察结果（例如跳转/页面元素/文案）
 

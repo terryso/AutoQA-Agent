@@ -11,3 +11,6 @@ autoqa.config.json
 conversations/
 scripts
 test-results
+.posts
+polyv-tests/
+polyv-specs/

@@ -30,11 +30,23 @@ function shouldPersistArtifacts(mode: ArtifactMode, ok: boolean): boolean {
   return !ok
 }
 
+/**
+ * Variables used in a step (from raw/unrendered spec text).
+ */
+export type StepVarInfo = {
+  /** Variable names used in this step (e.g., ['USERNAME', 'PASSWORD']) */
+  vars: string[]
+  /** Raw (unrendered) step text */
+  rawText: string
+}
+
 export type ParsedSpec = {
   specPath: string
   spec: MarkdownSpec
   /** Raw (unrendered) spec content for extracting {{VAR}} placeholders */
   rawContent?: string
+  /** Map of stepIndex -> variables used in that step */
+  stepVarsMap?: Map<number, StepVarInfo>
 }
 
 export type RunSpecFn = (input: {
@@ -44,17 +56,22 @@ export type RunSpecFn = (input: {
   spec: MarkdownSpec
   page: Page
   logger: Logger
+  /** Map of stepIndex -> variables used in that step */
+  stepVarsMap?: Map<number, StepVarInfo>
 }) => Promise<void> | void
 
 export type RunSpecsOptions = {
   runId: string
   baseUrl: string
+  loginBaseUrl?: string
   headless: boolean
   debug: boolean
   specs: ParsedSpec[]
   logger: Logger
   cwd: string
   onSpec?: RunSpecFn
+  /** Custom export directory (relative to cwd), defaults to 'tests/autoqa' */
+  exportDir?: string
 }
 
 export type RunSpecsFailureCode =
@@ -292,6 +309,7 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
             spec: spec.spec,
             page,
             logger,
+            stepVarsMap: spec.stepVarsMap,
           })
           specsPassed++
           specOk = true
@@ -376,7 +394,9 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
               specPath: spec.specPath,
               spec: spec.spec,
               baseUrl: options.baseUrl,
+              loginBaseUrl: options.loginBaseUrl,
               rawSpecContent: spec.rawContent,
+              exportDir: options.exportDir,
             })
 
             if (exportResult.ok) {
@@ -394,7 +414,7 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
                 exportPath: relativeExportPath,
               })
             } else {
-              const relativeExportPath = getRelativeExportPath(cwd, spec.specPath)
+              const relativeExportPath = getRelativeExportPath(cwd, spec.specPath, options.exportDir)
               exports.push({
                 specPath: spec.specPath,
                 exportPath: relativeExportPath,
@@ -415,7 +435,7 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
             const exportErrMsg = exportErr instanceof Error ? exportErr.message : String(exportErr)
             exports.push({
               specPath: spec.specPath,
-              exportPath: getRelativeExportPath(cwd, spec.specPath),
+              exportPath: getRelativeExportPath(cwd, spec.specPath, options.exportDir),
               ok: false,
               reason: `Export error: ${exportErrMsg}`,
             })

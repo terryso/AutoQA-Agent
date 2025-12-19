@@ -112,12 +112,24 @@ export function hasValidChosenLocator(record: ActionRecord): boolean {
 }
 
 /**
- * Get the list of element-targeting actions that are missing chosenLocator.
+ * Check if a record can use a fallback locator (has targetDescription).
+ */
+export function canUseFallbackLocator(record: ActionRecord): boolean {
+  const targetDesc = record.toolInput?.targetDescription as string | undefined
+  return Boolean(targetDesc && targetDesc.length > 0)
+}
+
+/**
+ * Get the list of element-targeting actions that are missing chosenLocator
+ * and cannot use a fallback locator.
  */
 export function getMissingLocatorActions(records: ActionRecord[]): ActionRecord[] {
   return records.filter((record) => {
     if (!isElementTargetingTool(record.toolName)) return false
     if (!record.outcome.ok) return false
-    return !hasValidChosenLocator(record)
+    if (hasValidChosenLocator(record)) return false
+    // Allow fallback for click actions with targetDescription
+    if (record.toolName === 'click' && canUseFallbackLocator(record)) return false
+    return true
   })
 }
