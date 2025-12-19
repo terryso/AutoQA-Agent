@@ -30,6 +30,8 @@ A "Docs-as-Tests" automated acceptance testing CLI tool based on Claude Agent SD
 
 ## Overview
 
+> **Built with BMAD-METHOD**: This project is developed using the [Breakthrough Method for Agile AI-Driven Development](https://github.com/bmad-code-org/BMAD-METHOD), featuring 21 specialized AI agents and structured workflows that scale from bug fixes to enterprise platforms.
+
 AutoQA-Agent is an innovative automated testing tool that enables QA and product managers to write acceptance tests in natural language Markdown, which are directly converted into executable test flows.
 
 ![AutoQA-Agent Overview](https://i.v2ex.co/hr3K8E93l.png)

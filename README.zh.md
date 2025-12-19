@@ -30,6 +30,8 @@
 
 ## 概述
 
+> **采用 BMAD-METHOD 构建**：本项目采用 [突破性敏捷 AI 驱动开发方法](https://github.com/bmad-code-org/BMAD-METHOD) 开发，具有 21 个专业 AI 代理和结构化工作流，可从错误修复扩展到企业级平台。
+
 AutoQA-Agent 是一个创新的自动化测试工具，让 QA 和产品经理能够用自然语言 Markdown 编写验收测试，直接转换为可执行的测试流程。
 
 ![AutoQA-Agent 总览图](https://i.v2ex.co/hr3K8E93l.png)
