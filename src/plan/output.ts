@@ -15,6 +15,7 @@ import type {
   TranscriptEntry,
   TestPlan,
   TestCasePlan,
+  GuardrailTrigger,
 } from './types.js'
 
 export type WriteExplorationResultOptions = {
@@ -305,4 +306,101 @@ export async function writeTestPlan(
   }
 
   return output
+}
+
+export type PlanSummary = {
+  runId: string
+  generatedAt: string
+  baseUrl: string
+  exploration: {
+    pagesVisited: number
+    elementsFound: number
+    formsFound: number
+    linksFound: number
+    maxDepthReached: number
+    configuredDepth: number
+  }
+  testPlan: {
+    casesGenerated: number
+    testTypes: string[]
+    priorities: {
+      p0: number
+      p1: number
+      p2: number
+    }
+  }
+  guardrailTriggered?: {
+    code: string
+    limit: number
+    actual: number
+    triggeredAt: string
+  }
+  exitCode: number
+}
+
+export type WritePlanSummaryOptions = {
+  runId: string
+  cwd?: string
+  exploration?: ExplorationResult
+  plan?: TestPlan
+  guardrailTriggered?: boolean
+  exitCode: number
+}
+
+export async function writePlanSummary(options: WritePlanSummaryOptions): Promise<{ path?: string; error?: string }> {
+  const { runId, exploration, plan, guardrailTriggered, exitCode } = options
+  const cwd = options.cwd ?? process.cwd()
+  const safeRunId = sanitizePathSegment(runId)
+  const baseDir = resolve(cwd, '.autoqa', 'runs', safeRunId, 'plan')
+  const absPath = resolve(baseDir, 'plan-summary.json')
+  const relPath = `.autoqa/runs/${safeRunId}/plan/plan-summary.json`
+
+  try {
+    await mkdir(baseDir, { recursive: true })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { error: `Failed to create plan directory: ${msg}` }
+  }
+
+  const summary: PlanSummary = {
+    runId,
+    generatedAt: new Date().toISOString(),
+    baseUrl: exploration?.startUrl || plan?.configSnapshot.baseUrl || 'unknown',
+    exploration: {
+      pagesVisited: exploration?.stats.pagesVisited ?? 0,
+      elementsFound: exploration?.stats.elementsFound ?? 0,
+      formsFound: exploration?.stats.formsFound ?? 0,
+      linksFound: exploration?.stats.linksFound ?? 0,
+      maxDepthReached: exploration?.stats.maxDepthReached ?? 0,
+      configuredDepth: exploration?.stats.configuredDepth ?? 0,
+    },
+    testPlan: {
+      casesGenerated: plan?.cases.length ?? 0,
+      testTypes: plan ? [...new Set(plan.cases.map(c => c.type))] : [],
+      priorities: {
+        p0: plan?.cases.filter(c => c.priority === 'p0').length ?? 0,
+        p1: plan?.cases.filter(c => c.priority === 'p1').length ?? 0,
+        p2: plan?.cases.filter(c => c.priority === 'p2').length ?? 0,
+      },
+    },
+    exitCode,
+  }
+
+  if (guardrailTriggered && exploration?.guardrailTriggered) {
+    summary.guardrailTriggered = {
+      code: exploration.guardrailTriggered.code,
+      limit: exploration.guardrailTriggered.limit,
+      actual: exploration.guardrailTriggered.actual,
+      triggeredAt: exploration.guardrailTriggered.triggeredAt,
+    }
+  }
+
+  try {
+    const content = JSON.stringify(summary, null, 2)
+    await writeFile(absPath, content, { encoding: 'utf-8', mode: 0o600 })
+    return { path: relPath }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { error: `Failed to write plan-summary.json: ${msg}` }
+  }
 }

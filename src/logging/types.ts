@@ -170,6 +170,28 @@ export type PlanGenerateOrchestratorFinishedEvent = LogEventBase & {
   specCount: number
 }
 
+export type PlanGenerateFailedEvent = LogEventBase & {
+  event: 'autoqa.plan.generate.failed'
+  error: string
+}
+
+export type PlanStartedEvent = LogEventBase & {
+  event: 'autoqa.plan.started'
+  baseUrl: string
+}
+
+export type PlanFinishedEvent = LogEventBase & {
+  event: 'autoqa.plan.finished'
+  pagesVisited: number
+  caseCount: number
+  specCount: number
+}
+
+export type PlanFailedEvent = LogEventBase & {
+  event: 'autoqa.plan.failed'
+  error: string
+}
+
 export type LogEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -190,6 +212,10 @@ export type LogEvent =
   | PlanExplorePageFailedEvent
   | PlanGenerateStartedEvent
   | PlanGenerateFinishedEvent
+  | PlanGenerateFailedEvent
   | PlanGenerateOrchestratorStartedEvent
   | PlanGenerateOrchestratorOutputErrorsEvent
   | PlanGenerateOrchestratorFinishedEvent
+  | PlanStartedEvent
+  | PlanFinishedEvent
+  | PlanFailedEvent

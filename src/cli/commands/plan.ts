@@ -7,6 +7,7 @@ import { Command } from 'commander'
 import { randomUUID } from 'node:crypto'
 
 import { createBrowser } from '../../browser/create-browser.js'
+import { readConfig } from '../../config/read.js'
 import { createLogger } from '../../logging/index.js'
 import { explore } from '../../plan/explore.js'
 import { writeExplorationResult } from '../../plan/output.js'
@@ -38,10 +39,45 @@ function validateUrl(value: string): string {
   }
 }
 
+function mergeConfigWithOptions(fileConfig: any, options: any): { config: PlanConfig; guardrails: GuardrailConfig } {
+  const planConfig = fileConfig?.plan || {}
+  
+  const guardrails: GuardrailConfig = {}
+  if (options.maxAgentTurns) guardrails.maxAgentTurnsPerRun = options.maxAgentTurns
+  else if (planConfig.guardrails?.maxAgentTurnsPerRun) guardrails.maxAgentTurnsPerRun = planConfig.guardrails.maxAgentTurnsPerRun
+  
+  if (options.maxSnapshots) guardrails.maxSnapshotsPerRun = options.maxSnapshots
+  else if (planConfig.guardrails?.maxSnapshotsPerRun) guardrails.maxSnapshotsPerRun = planConfig.guardrails.maxSnapshotsPerRun
+  
+  if (options.maxPages) guardrails.maxPagesPerRun = options.maxPages
+  else if (planConfig.guardrails?.maxPagesPerRun) guardrails.maxPagesPerRun = planConfig.guardrails.maxPagesPerRun
+  
+  const baseUrl = options.url || planConfig.baseUrl
+  if (!baseUrl) {
+    throw new Error('baseUrl is required (provide via --url or autoqa.config.json plan.baseUrl)')
+  }
+  
+  const config: PlanConfig = {
+    baseUrl,
+    maxDepth: options.depth ?? planConfig.maxDepth ?? 3,
+    maxPages: options.maxPages ?? planConfig.maxPages,
+    testTypes: options.testTypes ? options.testTypes.split(',').map((t: string) => t.trim().toLowerCase()) : planConfig.testTypes,
+    guardrails: Object.keys(guardrails).length > 0 ? guardrails : undefined,
+    auth: options.loginUrl ? {
+      loginUrl: options.loginUrl,
+      username: options.username,
+      password: options.password,
+    } : undefined,
+  }
+  
+  return { config, guardrails }
+}
+
 export function registerPlanCommand(program: Command): void {
   const plan = program
     .command('plan')
     .description('Plan and explore test scenarios')
+    .option('--config <path>', 'Path to autoqa.config.json (default: ./autoqa.config.json)')
 
   plan
     .command('explore')
@@ -57,25 +93,22 @@ export function registerPlanCommand(program: Command): void {
     .option('--headless', 'Run browser in headless mode', false)
     .action(async (options) => {
       const runId = randomUUID()
-      const logger = createLogger({ runId, cwd: process.cwd(), debug: false, writeToFile: true })
+      const cwd = process.cwd()
+      const logger = createLogger({ runId, cwd, debug: false, writeToFile: true })
 
-      // Build guardrail config
-      const guardrails: GuardrailConfig = {}
-      if (options.maxAgentTurns) guardrails.maxAgentTurnsPerRun = options.maxAgentTurns
-      if (options.maxSnapshots) guardrails.maxSnapshotsPerRun = options.maxSnapshots
-      if (options.maxPages) guardrails.maxPagesPerRun = options.maxPages
+      const configResult = readConfig(cwd)
+      if (!configResult.ok) {
+        console.error(`❌ Configuration error: ${configResult.error.message}`)
+        process.exit(2)
+      }
 
-      // Build config following Tech Spec structure
-      const config: PlanConfig = {
-        baseUrl: options.url,
-        maxDepth: options.depth,
-        maxPages: options.maxPages,
-        guardrails: Object.keys(guardrails).length > 0 ? guardrails : undefined,
-        auth: options.loginUrl ? {
-          loginUrl: options.loginUrl,
-          username: options.username,
-          password: options.password,
-        } : undefined,
+      let config: PlanConfig
+      try {
+        const merged = mergeConfigWithOptions(configResult.config, options)
+        config = merged.config
+      } catch (error) {
+        console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
+        process.exit(2)
       }
 
       let browserResult = null
@@ -108,6 +141,7 @@ export function registerPlanCommand(program: Command): void {
           writeOutput.errors.forEach((e) => console.error(`  - ${e}`))
         }
       } catch (error) {
+        logger.log({ event: 'autoqa.plan.explore.failed', runId, error: error instanceof Error ? error.message : String(error) })
         console.error(`❌ Exploration failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       } finally {
@@ -129,23 +163,23 @@ export function registerPlanCommand(program: Command): void {
     .option('--max-agent-turns <number>', 'Maximum agent turns for planning', validatePositiveInt)
     .action(async (options) => {
       const runId = options.runId
+      const cwd = process.cwd()
+      const logger = createLogger({ runId, cwd, debug: false, writeToFile: true })
       
-      // Build config from options
-      const testTypes = options.testTypes
-        ? options.testTypes.split(',').map((t: string) => t.trim().toLowerCase())
-        : undefined
-
-      const guardrails: GuardrailConfig = {}
-      if (options.maxAgentTurns) guardrails.maxAgentTurnsPerRun = options.maxAgentTurns
-
-      const config: PlanConfig = {
-        baseUrl: options.url,
-        maxDepth: 3,
-        testTypes,
-        guardrails: Object.keys(guardrails).length > 0 ? guardrails : undefined,
+      const configResult = readConfig(cwd)
+      if (!configResult.ok) {
+        console.error(`❌ Configuration error: ${configResult.error.message}`)
+        process.exit(2)
       }
 
-      const logger = createLogger({ runId, cwd: process.cwd(), debug: false, writeToFile: true })
+      let config: PlanConfig
+      try {
+        const merged = mergeConfigWithOptions(configResult.config, options)
+        config = merged.config
+      } catch (error) {
+        console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
+        process.exit(2)
+      }
 
       try {
         const result = await generateTestPlan({
@@ -165,6 +199,7 @@ export function registerPlanCommand(program: Command): void {
           result.output.errors.forEach((e) => console.error(`  - ${e}`))
         }
       } catch (error) {
+        logger.log({ event: 'autoqa.plan.generate.failed', runId, error: error instanceof Error ? error.message : String(error) })
         console.error(`❌ Test plan generation failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       }
@@ -186,31 +221,22 @@ export function registerPlanCommand(program: Command): void {
     .option('--headless', 'Run browser in headless mode', false)
     .action(async (options) => {
       const runId = randomUUID()
-      const logger = createLogger({ runId, cwd: process.cwd(), debug: false, writeToFile: true })
+      const cwd = process.cwd()
+      const logger = createLogger({ runId, cwd, debug: false, writeToFile: true })
 
-      // Parse test types if provided
-      const testTypes = options.testTypes
-        ? options.testTypes.split(',').map((t: string) => t.trim().toLowerCase())
-        : undefined
+      const configResult = readConfig(cwd)
+      if (!configResult.ok) {
+        console.error(`❌ Configuration error: ${configResult.error.message}`)
+        process.exit(2)
+      }
 
-      // Build guardrail config
-      const guardrails: GuardrailConfig = {}
-      if (options.maxAgentTurns) guardrails.maxAgentTurnsPerRun = options.maxAgentTurns
-      if (options.maxSnapshots) guardrails.maxSnapshotsPerRun = options.maxSnapshots
-      if (options.maxPages) guardrails.maxPagesPerRun = options.maxPages
-
-      // Build config following Tech Spec structure
-      const config: PlanConfig = {
-        baseUrl: options.url,
-        maxDepth: options.depth,
-        maxPages: options.maxPages,
-        testTypes,
-        guardrails: Object.keys(guardrails).length > 0 ? guardrails : undefined,
-        auth: options.loginUrl ? {
-          loginUrl: options.loginUrl,
-          username: options.username,
-          password: options.password,
-        } : undefined,
+      let config: PlanConfig
+      try {
+        const merged = mergeConfigWithOptions(configResult.config, options)
+        config = merged.config
+      } catch (error) {
+        console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
+        process.exit(2)
       }
 
       let browserResult = null
@@ -268,6 +294,7 @@ export function registerPlanCommand(program: Command): void {
         console.log(`  - Test specs: ${testPlanResult.output.specPaths.length} files`)
 
       } catch (error) {
+        logger.log({ event: 'autoqa.plan.failed', runId, error: error instanceof Error ? error.message : String(error) })
         console.error(`❌ Plan command failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       } finally {

@@ -1,6 +1,6 @@
 # Story 7.3: `autoqa plan` 命令编排（探索 + 规划 + 用例生成）
 
-Status: draft
+Status: review
 
 ## Story
 
@@ -32,20 +32,20 @@ so that 我可以在不同项目上快速得到可直接执行的测试计划。
 
 ## Tasks / Subtasks
 
-- [ ] 实现 `autoqa plan` 顶层命令（AC: 1, 2, 3）  
-  - [ ] 在 `src/cli/commands/plan.ts` 中扩展现有命令，增加默认子流程编排逻辑  
-  - [ ] 解析 `-u/--url`、`--env`、`--config` 等参数，并与 `autoqa.config.json` 中的 `plan` 段合并  
-  - [ ] 约定退出码语义：`0=规划成功`、`1=运行时失败或被 guardrail 截断`、`2=参数/配置错误`
+- [x] 实现 `autoqa plan` 顶层命令（AC: 1, 2, 3）  
+  - [x] 在 `src/cli/commands/plan.ts` 中扩展现有命令，增加默认子流程编排逻辑  
+  - [x] 解析 `-u/--url`、`--env`、`--config` 等参数，并与 `autoqa.config.json` 中的 `plan` 段合并  
+  - [x] 约定退出码语义：`0=规划成功`、`1=运行时失败或被 guardrail 截断`、`2=参数/配置错误`
 
-- [ ] 编排 orchestrator 调用（AC: 1, 2, 4）  
-  - [ ] 在 `src/plan/orchestrator.ts` 中提供单一入口（如 `runPlan(config)`），内部依次调用探索与生成  
-  - [ ] 支持仅执行探索或仅执行生成的模式，供子命令/后续扩展使用  
-  - [ ] 在 orchestrator 内集中管理 runId 与产物输出位置
+- [x] 编排 orchestrator 调用（AC: 1, 2, 4）  
+  - [x] 在 `src/plan/orchestrator.ts` 中提供单一入口（如 `runPlan(config)`），内部依次调用探索与生成  
+  - [x] 支持仅执行探索或仅执行生成的模式，供子命令/后续扩展使用  
+  - [x] 在 orchestrator 内集中管理 runId 与产物输出位置
 
-- [ ] 总结产物与日志（AC: 1, 2, 3）  
-  - [ ] 设计并实现 `plan-summary.json` 结构，记录：页数、用例数、覆盖的测试类型、guardrail 是否触发等  
-  - [ ] 扩展 `src/logging/types.ts`，增加 `autoqa.plan.started/finished/failed` 等事件，并在 CLI 中打印关键信息  
-  - [ ] 确保日志与现有 `autoqa.run` 日志格式对齐，方便统一收集与分析
+- [x] 总结产物与日志（AC: 1, 2, 3）  
+  - [x] 设计并实现 `plan-summary.json` 结构，记录：页数、用例数、覆盖的测试类型、guardrail 是否触发等  
+  - [x] 扩展 `src/logging/types.ts`，增加 `autoqa.plan.started/finished/failed` 等事件，并在 CLI 中打印关键信息  
+  - [x] 确保日志与现有 `autoqa.run` 日志格式对齐，方便统一收集与分析
 
 ## Dev Notes
 
@@ -79,20 +79,70 @@ Cascade
 
 ### Implementation Plan
 
-TBD
+1. **扩展配置 schema** (src/config/schema.ts)
+   - 添加 `planConfigSchema` 和 `planGuardrailsSchema`
+   - 在 `autoqaConfigSchema` 中添加可选的 `plan` 字段
+   - 支持从配置文件读取 baseUrl、maxDepth、testTypes、guardrails 等参数
+
+2. **增强 CLI 命令** (src/cli/commands/plan.ts)
+   - 实现 `mergeConfigWithOptions` 函数，合并配置文件和命令行参数
+   - 优先级：命令行 > 配置文件 > 默认值
+   - 为所有子命令添加配置读取和合并逻辑
+   - 实现退出码语义：0=成功、1=运行时失败/guardrail、2=配置错误
+
+3. **实现 orchestrator 统一入口** (src/plan/orchestrator.ts)
+   - 添加 `runPlan` 函数，支持 full/explore-only/generate-only 模式
+   - 集中管理 runId 和产物输出位置
+   - 统一日志事件发送（autoqa.plan.started/finished/failed）
+
+4. **实现总结产物** (src/plan/output.ts)
+   - 添加 `PlanSummary` 类型定义
+   - 实现 `writePlanSummary` 函数
+   - 记录探索统计、测试用例数量、测试类型分布、优先级分布
+   - 记录 guardrail 触发信息和退出码
+
+5. **扩展日志事件** (src/logging/types.ts)
+   - 添加 `PlanStartedEvent`、`PlanFinishedEvent`、`PlanFailedEvent`
+   - 添加 `PlanGenerateFailedEvent`
+   - 确保与现有日志格式一致
 
 ### Debug Log References
 
-TBD
+- 所有测试通过（24 个单元测试）
+- 配置 schema 验证正常
+- 日志事件类型定义完整
 
 ### Completion Notes List
 
-TBD
+- ✅ 实现了配置文件与命令行参数的合并逻辑，优先级为：命令行 > 配置文件 > 默认值
+- ✅ 扩展了 autoqa.config.json schema 以支持 plan 配置段
+- ✅ 实现了 runPlan 统一入口函数，支持 full/explore-only/generate-only 三种模式
+- ✅ 实现了 plan-summary.json 产物，包含探索统计、测试用例分布、guardrail 信息
+- ✅ 添加了完整的日志事件类型（autoqa.plan.started/finished/failed/generate.failed）
+- ✅ 实现了退出码语义：0=成功、1=运行时失败或 guardrail 触发、2=配置错误
+- ✅ 编写了 24 个单元测试，覆盖配置合并、orchestrator 模式、总结产物结构、schema 验证
+- ✅ 所有测试通过，代码质量良好
 
 ### File List
 
-TBD
+- src/config/schema.ts (修改)
+- src/cli/commands/plan.ts (修改)
+- src/plan/orchestrator.ts (修改)
+- src/plan/output.ts (修改)
+- src/logging/types.ts (修改)
+- tests/unit/cli-plan-config-merge.test.ts (新增)
+- tests/unit/plan-orchestrator.test.ts (新增)
+- tests/unit/plan-summary.test.ts (新增)
+- tests/unit/config-schema-plan.test.ts (新增)
 
 ### Change Log
 
 - 2025-12-20: 初始创建 Story 7.3 文档（`autoqa plan` 命令编排），尚未实现
+- 2025-12-21: 完成 Story 7.3 实现
+  - 扩展配置 schema 支持 plan 配置段
+  - 实现配置文件与命令行参数合并逻辑
+  - 实现 runPlan 统一入口函数，支持多种模式
+  - 实现 plan-summary.json 总结产物
+  - 添加完整的日志事件类型
+  - 实现退出码语义
+  - 编写并通过 24 个单元测试
