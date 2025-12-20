@@ -382,6 +382,13 @@ export type PlanSummary = {
     /** ISO 8601 timestamp when guardrail was triggered */
     triggeredAt: string
   }
+  /** Snapshot of effective configuration at plan time */
+  effectiveConfig?: {
+    baseUrl: string
+    maxDepth: number
+    maxPages?: number
+    testTypes?: string[]
+  }
   /** Exit code: 0 for success, 10 for guardrail, 1 for error, 2 for config error */
   exitCode: number
 }
@@ -456,6 +463,15 @@ export async function writePlanSummary(options: WritePlanSummaryOptions): Promis
       limit: exploration.guardrailTriggered.limit,
       actual: exploration.guardrailTriggered.actual,
       triggeredAt: exploration.guardrailTriggered.triggeredAt,
+    }
+  }
+
+  if (plan?.configSnapshot) {
+    summary.effectiveConfig = {
+      baseUrl: plan.configSnapshot.baseUrl,
+      maxDepth: plan.configSnapshot.maxDepth,
+      maxPages: plan.configSnapshot.maxPages,
+      testTypes: plan.configSnapshot.testTypes,
     }
   }
 

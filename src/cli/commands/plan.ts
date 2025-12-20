@@ -10,9 +10,9 @@ import { createBrowser } from '../../browser/create-browser.js'
 import { readConfig, loadPlanConfig } from '../../config/read.js'
 import { createLogger } from '../../logging/index.js'
 import { explore } from '../../plan/explore.js'
-import { writeExplorationResult } from '../../plan/output.js'
+import { writeExplorationResult, writePlanSummary } from '../../plan/output.js'
 import { generateTestPlan } from '../../plan/orchestrator.js'
-import type { PlanConfig, GuardrailConfig } from '../../plan/types.js'
+import type { PlanConfig } from '../../plan/types.js'
 
 const GUARDRAIL_EXIT_CODE = 10
 const CONFIG_ERROR_EXIT_CODE = 2
@@ -51,10 +51,9 @@ function sanitizeErrorMessage(error: unknown): string {
     .replace(/token[=:]\s*[^\s&]+/gi, 'token=***')
     .replace(/api[_-]?key[=:]\s*[^\s&]+/gi, 'apikey=***')
     .replace(/secret[=:]\s*[^\s&]+/gi, 'secret=***')
-}
-
-function mergeConfigWithOptions(fileConfig: any, options: any): PlanConfig {
-  return loadPlanConfig(fileConfig, options)
+    .replace(/auth[=:]\s*[^\s&]+/gi, 'auth=***')
+    .replace(/credential[s]?[=:]\s*[^\s&]+/gi, 'credentials=***')
+    .replace(/bearer\s+[A-Za-z0-9._-]+/gi, 'bearer ***')
 }
 
 type ConfigResult = { ok: true; config: PlanConfig } | { ok: false; exitCode: number }
@@ -67,7 +66,26 @@ function loadAndMergeConfig(cwd: string, options: any): ConfigResult {
   }
 
   try {
-    const config = mergeConfigWithOptions(configResult.config, options)
+    const config = loadPlanConfig(configResult.config, options)
+    // Debug-style visibility of effective configuration and CLI overrides
+    const overridden: string[] = []
+    if (options.url) overridden.push('url')
+    if (options.depth !== undefined) overridden.push('depth')
+    if (options.maxPages !== undefined) overridden.push('maxPages')
+    if (options.maxAgentTurns !== undefined) overridden.push('maxAgentTurns')
+    if (options.maxSnapshots !== undefined) overridden.push('maxSnapshots')
+    if (options.testTypes) overridden.push('testTypes')
+    if (options.loginUrl) overridden.push('loginUrl')
+    if (options.username) overridden.push('username')
+    if (options.password) overridden.push('password')
+
+    if (overridden.length > 0) {
+      // Use console.debug so it only appears when user enables debug output
+      console.debug(
+        '[autoqa.plan] CLI options overriding config file values:',
+        overridden.join(', '),
+      )
+    }
     return { ok: true, config }
   } catch (error) {
     console.error(`❌ ${sanitizeErrorMessage(error)}`)
@@ -155,6 +173,13 @@ export function registerPlanCommand(program: Command): void {
           console.error(`\n⚠️ Errors occurred:`)
           writeOutput.errors.forEach((e) => console.error(`  - ${e}`))
         }
+        // Write plan-summary.json for explore-only runs (no test plan yet)
+        await writePlanSummary({
+          runId,
+          cwd: process.cwd(),
+          exploration: result,
+          exitCode: 0,
+        })
       } catch (error) {
         logger.log({ event: 'autoqa.plan.explore.failed', runId, error: sanitizeErrorMessage(error) })
         console.error(`❌ Exploration failed: ${sanitizeErrorMessage(error)}`)
@@ -232,9 +257,9 @@ export function registerPlanCommand(program: Command): void {
 
       let config: PlanConfig
       try {
-        config = mergeConfigWithOptions(configResult.config, options)
+        config = loadPlanConfig(configResult.config, options)
       } catch (error) {
-        console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
+        console.error(`❌ ${sanitizeErrorMessage(error)}`)
         process.exit(2)
       }
 
@@ -355,7 +380,14 @@ export function registerPlanCommand(program: Command): void {
           logger.log({ 
             event: 'autoqa.plan.explore.finished', 
             runId, 
-            stats: explorationResult.stats 
+            stats: explorationResult.stats, 
+          })
+          await writePlanSummary({
+            runId,
+            cwd: process.cwd(),
+            exploration: explorationResult,
+            guardrailTriggered: true,
+            exitCode: GUARDRAIL_EXIT_CODE,
           })
           process.exit(GUARDRAIL_EXIT_CODE)
         }
