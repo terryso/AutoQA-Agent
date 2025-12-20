@@ -88,7 +88,7 @@ development_status:
 
   epic-7: in-progress
   7-1-app-exploration-engine: done
-  7-2-intelligent-test-case-generator: in-progress
+  7-2-intelligent-test-case-generator: done
   7-3-plan-command-implementation: backlog
   7-4-configurable-exploration-strategy: backlog
   7-5-integration-with-existing-toolchain: backlog

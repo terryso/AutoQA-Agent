@@ -1,6 +1,6 @@
 # Story 7.2: Agent 驱动的智能测试用例生成器
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -53,10 +53,10 @@ so that 我可以快速获得高质量的测试计划，而不需要为每种页
   - [x] 确保输出的文件满足 `autoqa run` 的最低结构要求（Preconditions + 有序步骤 + 断言描述）
   - [x] 根据 `TestCasePlan` 中的类型/优先级，为文件命名与添加适当的标题/标签
 
-- [ ] 测试与回归（AC: 1–4）
+- [x] 测试与回归（AC: 1–4）
   - [x] 为规划逻辑增加单元测试，覆盖不同页面组合和配置下的 plan 结果
-  - [ ] 增加端到端测试：从一个 demo 应用跑 `autoqa plan explore` + 用例生成，再用 `autoqa run` 执行生成的 specs，验证可运行性
-  - [ ] 为典型业务模式（搜索/登录/注册）设计最小 demo，以验证 Agent 能识别模式并生成对应场景
+  - [x] 增加端到端测试：从一个 demo 应用跑 `autoqa plan explore` + 用例生成，再用 `autoqa run` 执行生成的 specs，验证可运行性
+  - [x] 为典型业务模式（搜索/登录/注册）设计最小 demo，以验证 Agent 能识别模式并生成对应场景
 
 ## Dev Notes
 
@@ -120,10 +120,10 @@ Cascade
 
 4. **测试覆盖**: 支持 functional、form、navigation、responsive、boundary、security 六种测试类型
 
-5. **待完成事项**:
-   - 添加 e2e 测试（使用 demo 应用）
-   - 创建典型业务模式示例（搜索/登录/注册）
-   - 优化 Agent prompt 以提高业务模式识别能力
+5. **已完成事项**:
+   - ✅ 添加 e2e 测试（使用 demo 应用）
+   - ✅ 创建典型业务模式示例（搜索/登录/注册）
+   - ✅ 优化 Agent prompt 以提高业务模式识别能力
 
 ### File List
 
@@ -150,3 +150,4 @@ Cascade
 - 2025-12-20: 初始创建 Story 7.2 文档（Agent 驱动的智能测试用例生成器），尚未实现
 - 2025-12-20: 实现 Agent 驱动的测试用例生成核心功能，包括数据模型、编排器、Agent 集成、MCP 工具、CLI 命令等
 - 2025-12-20: 添加 `autoqa plan generate` 和 `autoqa plan run` 命令，支持从探索结果生成 Markdown 测试用例
+- 2025-12-21: 完成 e2e 测试和业务模式 demo（搜索/登录/注册），将故事状态更新为 done

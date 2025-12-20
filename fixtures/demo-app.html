@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo App - Test Planning</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            padding: 20px 0;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: #333;
+            margin-left: 20px;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        nav a:hover {
+            background-color: #e0e0e0;
+        }
+
+        nav a.active {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .hero {
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .search-section {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        .search-box button {
+            padding: 12px 24px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .search-results {
+            min-height: 100px;
+        }
+
+        .login-form {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        .form-group input.error {
+            border-color: #dc3545;
+        }
+
+        .error-message {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .register-form {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .password-strength {
+            margin-top: 5px;
+            font-size: 14px;
+        }
+
+        .strength-weak {
+            color: #dc3545;
+        }
+
+        .strength-medium {
+            color: #ffc107;
+        }
+
+        .strength-strong {
+            color: #28a745;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .footer {
+            background-color: #fff;
+            padding: 20px;
+            text-align: center;
+            margin-top: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        @media (max-width: 768px) {
+            nav {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            nav a {
+                margin: 0;
+            }
+
+            .search-box {
+                flex-direction: column;
+            }
+
+            .hero, .search-section, .login-form, .register-form {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <h1>DemoApp</h1>
+            </div>
+            <div class="nav-links">
+                <a href="#" class="active">Home</a>
+                <a href="#search">Search</a>
+                <a href="#login">Login</a>
+                <a href="#register">Register</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section id="home" class="hero">
+            <h2>Welcome to Demo App</h2>
+            <p>This is a demo application for testing AutoQA's intelligent test planning capabilities.</p>
+        </section>
+
+        <section id="search" class="search-section">
+            <h2>Search</h2>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search for products..." />
+                <button onclick="performSearch()">Search</button>
+            </div>
+            <div id="searchResults" class="search-results">
+                <p>Enter a search term to see results.</p>
+            </div>
+        </section>
+
+        <section id="login" class="login-form">
+            <h2>Login</h2>
+            <div id="loginError" class="alert alert-danger" style="display: none;"></div>
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" required />
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" required />
+                </div>
+                <button type="submit" class="btn">Login</button>
+            </form>
+        </section>
+
+        <section id="register" class="register-form">
+            <h2>Register</h2>
+            <div id="registerMessage" class="alert" style="display: none;"></div>
+            <form onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="regName">Name:</label>
+                    <input type="text" id="regName" required minlength="2" />
+                </div>
+                <div class="form-group">
+                    <label for="regEmail">Email:</label>
+                    <input type="email" id="regEmail" required />
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Password:</label>
+                    <input type="password" id="regPassword" required minlength="6" oninput="checkPasswordStrength()" />
+                    <div id="passwordStrength" class="password-strength"></div>
+                </div>
+                <div class="form-group">
+                    <label for="regConfirmPassword">Confirm Password:</label>
+                    <input type="password" id="regConfirmPassword" required />
+                </div>
+                <button type="submit" class="btn">Register</button>
+            </form>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2025 DemoApp. Built for AutoQA testing.</p>
+    </footer>
+
+    <script>
+        // Search functionality
+        function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            const resultsDiv = document.getElementById('searchResults');
+
+            if (!query) {
+                resultsDiv.innerHTML = '<p>Please enter a search term.</p>';
+                return;
+            }
+
+            // Simulate search results
+            const mockResults = [
+                'Product A - $99.99',
+                'Product B - $149.99',
+                'Product C - $199.99'
+            ];
+
+            if (query.toLowerCase() === 'empty' || query.toLowerCase() === 'test') {
+                resultsDiv.innerHTML = '<p>No results found for your search.</p>';
+            } else {
+                resultsDiv.innerHTML = `
+                    <h3>Search Results for "${query}":</h3>
+                    <ul>
+                        ${mockResults.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                `;
+            }
+        }
+
+        // Login functionality
+        function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('loginError');
+
+            // Clear previous errors
+            errorDiv.style.display = 'none';
+
+            // Validation
+            if (email === 'test@example.com' && password === 'wrong') {
+                errorDiv.textContent = 'Invalid email or password. Please try again.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (email === 'locked@example.com') {
+                errorDiv.textContent = 'Account locked due to too many failed attempts.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // Success
+            alert(`Login successful! Welcome ${email}`);
+        }
+
+        // Register functionality
+        function handleRegister(event) {
+            event.preventDefault();
+            const name = document.getElementById('regName').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regConfirmPassword').value;
+            const messageDiv = document.getElementById('registerMessage');
+
+            // Clear previous messages
+            messageDiv.style.display = 'none';
+
+            // Validation
+            if (password !== confirmPassword) {
+                messageDiv.textContent = 'Passwords do not match.';
+                messageDiv.className = 'alert alert-danger';
+                messageDiv.style.display = 'block';
+                return;
+            }
+
+            if (password.length < 6) {
+                messageDiv.textContent = 'Password must be at least 6 characters.';
+                messageDiv.className = 'alert alert-danger';
+                messageDiv.style.display = 'block';
+                return;
+            }
+
+            // Success
+            messageDiv.textContent = `Registration successful! Welcome ${name}!`;
+            messageDiv.className = 'alert alert-success';
+            messageDiv.style.display = 'block';
+
+            // Clear form
+            document.getElementById('regName').value = '';
+            document.getElementById('regEmail').value = '';
+            document.getElementById('regPassword').value = '';
+            document.getElementById('regConfirmPassword').value = '';
+            document.getElementById('passwordStrength').textContent = '';
+        }
+
+        // Password strength checker
+        function checkPasswordStrength() {
+            const password = document.getElementById('regPassword').value;
+            const strengthDiv = document.getElementById('passwordStrength');
+
+            if (password.length < 6) {
+                strengthDiv.textContent = 'Password strength: Weak';
+                strengthDiv.className = 'password-strength strength-weak';
+            } else if (password.length < 10 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+                strengthDiv.textContent = 'Password strength: Medium';
+                strengthDiv.className = 'password-strength strength-medium';
+            } else {
+                strengthDiv.textContent = 'Password strength: Strong';
+                strengthDiv.className = 'password-strength strength-strong';
+            }
+        }
+
+        // Navigation handling
+        document.querySelectorAll('nav a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+
+                // Update active state
+                document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+                this.classList.add('active');
+
+                // Scroll to section
+                const targetId = this.getAttribute('href');
+                if (targetId && targetId !== '#') {
+                    const targetSection = document.querySelector(targetId);
+                    if (targetSection) {
+                        targetSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                }
+            });
+        });
+
+        // XSS test - reflect input
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            // This creates an XSS vulnerability for testing
+            const value = e.target.value;
+            if (value.includes('<script>') || value.includes('javascript:')) {
+                console.log('Potential XSS detected:', value);
+            }
+        });
+    </script>
+</body>
+</html>
