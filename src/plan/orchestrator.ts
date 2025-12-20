@@ -217,7 +217,7 @@ export async function runPlan(options: RunPlanOptions): Promise<RunPlanResult> {
       exploration: result.exploration,
       plan: result.plan,
       guardrailTriggered: result.guardrailTriggered,
-      exitCode: result.guardrailTriggered ? 1 : 0,
+      exitCode: result.guardrailTriggered ? 10 : 0,
     })
 
     if (summaryResult.error) {
@@ -244,7 +244,13 @@ export async function runPlan(options: RunPlanOptions): Promise<RunPlanResult> {
       plan: result.plan,
       guardrailTriggered: result.guardrailTriggered,
       exitCode: 1,
-    }).catch(() => {})
+    }).catch((summaryError) => {
+      logger.log({
+        event: 'autoqa.plan.generate.orchestrator.output_errors',
+        runId,
+        errors: [summaryError instanceof Error ? summaryError.message : String(summaryError)],
+      })
+    })
 
     throw error
   }

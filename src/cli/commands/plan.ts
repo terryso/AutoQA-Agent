@@ -14,6 +14,12 @@ import { writeExplorationResult } from '../../plan/output.js'
 import { generateTestPlan } from '../../plan/orchestrator.js'
 import type { PlanConfig, GuardrailConfig } from '../../plan/types.js'
 
+const DEFAULT_MAX_DEPTH = 3
+const VALID_TEST_TYPES = ['functional', 'form', 'navigation', 'responsive', 'boundary', 'security'] as const
+const GUARDRAIL_EXIT_CODE = 10
+const CONFIG_ERROR_EXIT_CODE = 2
+const RUNTIME_ERROR_EXIT_CODE = 1
+
 function validateDepth(value: string): number {
   const parsed = parseInt(value, 10)
   if (isNaN(parsed) || parsed < 0 || parsed > 10) {
@@ -39,6 +45,24 @@ function validateUrl(value: string): string {
   }
 }
 
+function validateTestTypes(types: string): string[] {
+  const typeList = types.split(',').map((t: string) => t.trim().toLowerCase())
+  const invalid = typeList.filter(t => !VALID_TEST_TYPES.includes(t as any))
+  if (invalid.length > 0) {
+    throw new Error(`Invalid test types: ${invalid.join(', ')}. Valid types: ${VALID_TEST_TYPES.join(', ')}`)
+  }
+  return typeList
+}
+
+function sanitizeErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message
+    .replace(/password[=:]\s*[^\s&]+/gi, 'password=***')
+    .replace(/token[=:]\s*[^\s&]+/gi, 'token=***')
+    .replace(/api[_-]?key[=:]\s*[^\s&]+/gi, 'apikey=***')
+    .replace(/secret[=:]\s*[^\s&]+/gi, 'secret=***')
+}
+
 function mergeConfigWithOptions(fileConfig: any, options: any): { config: PlanConfig; guardrails: GuardrailConfig } {
   const planConfig = fileConfig?.plan || {}
   
@@ -57,11 +81,16 @@ function mergeConfigWithOptions(fileConfig: any, options: any): { config: PlanCo
     throw new Error('baseUrl is required (provide via --url or autoqa.config.json plan.baseUrl)')
   }
   
+  let testTypes: PlanConfig['testTypes'] = planConfig.testTypes
+  if (options.testTypes) {
+    testTypes = validateTestTypes(options.testTypes) as PlanConfig['testTypes']
+  }
+  
   const config: PlanConfig = {
     baseUrl,
-    maxDepth: options.depth ?? planConfig.maxDepth ?? 3,
+    maxDepth: options.depth ?? planConfig.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxPages: options.maxPages ?? planConfig.maxPages,
-    testTypes: options.testTypes ? options.testTypes.split(',').map((t: string) => t.trim().toLowerCase()) : planConfig.testTypes,
+    testTypes,
     guardrails: Object.keys(guardrails).length > 0 ? guardrails : undefined,
     auth: options.loginUrl ? {
       loginUrl: options.loginUrl,
@@ -71,6 +100,46 @@ function mergeConfigWithOptions(fileConfig: any, options: any): { config: PlanCo
   }
   
   return { config, guardrails }
+}
+
+type ConfigResult = { ok: true; config: PlanConfig } | { ok: false; exitCode: number }
+
+function loadAndMergeConfig(cwd: string, options: any): ConfigResult {
+  const configResult = readConfig(cwd)
+  if (!configResult.ok) {
+    console.error(`❌ Configuration error: ${configResult.error.message}`)
+    return { ok: false, exitCode: CONFIG_ERROR_EXIT_CODE }
+  }
+
+  try {
+    const merged = mergeConfigWithOptions(configResult.config, options)
+    return { ok: true, config: merged.config }
+  } catch (error) {
+    console.error(`❌ ${sanitizeErrorMessage(error)}`)
+    return { ok: false, exitCode: CONFIG_ERROR_EXIT_CODE }
+  }
+}
+
+async function closeBrowserSafely(browserResult: any): Promise<void> {
+  if (!browserResult) return
+  
+  const closeOperations = []
+  if (browserResult.persistentContext) {
+    closeOperations.push(
+      browserResult.persistentContext.close().catch((err: any) => {
+        console.error(`Warning: Failed to close persistent context: ${err.message}`)
+      })
+    )
+  }
+  if (browserResult.browser) {
+    closeOperations.push(
+      browserResult.browser.close().catch((err: any) => {
+        console.error(`Warning: Failed to close browser: ${err.message}`)
+      })
+    )
+  }
+  
+  await Promise.allSettled(closeOperations)
 }
 
 export function registerPlanCommand(program: Command): void {
@@ -83,7 +152,7 @@ export function registerPlanCommand(program: Command): void {
     .command('explore')
     .description('Explore a web application and generate page structure')
     .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
-    .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth, 3)
+    .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth)
     .option('--max-pages <number>', 'Maximum pages to visit', validatePositiveInt)
     .option('--max-agent-turns <number>', 'Maximum agent tool calls (guardrail)', validatePositiveInt)
     .option('--max-snapshots <number>', 'Maximum snapshots to capture (guardrail)', validatePositiveInt)
@@ -96,20 +165,11 @@ export function registerPlanCommand(program: Command): void {
       const cwd = process.cwd()
       const logger = createLogger({ runId, cwd, debug: false, writeToFile: true })
 
-      const configResult = readConfig(cwd)
-      if (!configResult.ok) {
-        console.error(`❌ Configuration error: ${configResult.error.message}`)
-        process.exit(2)
+      const configLoad = loadAndMergeConfig(cwd, options)
+      if (!configLoad.ok) {
+        process.exit(configLoad.exitCode)
       }
-
-      let config: PlanConfig
-      try {
-        const merged = mergeConfigWithOptions(configResult.config, options)
-        config = merged.config
-      } catch (error) {
-        console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
-        process.exit(2)
-      }
+      const config = configLoad.config
 
       let browserResult = null
       try {
@@ -141,16 +201,11 @@ export function registerPlanCommand(program: Command): void {
           writeOutput.errors.forEach((e) => console.error(`  - ${e}`))
         }
       } catch (error) {
-        logger.log({ event: 'autoqa.plan.explore.failed', runId, error: error instanceof Error ? error.message : String(error) })
-        console.error(`❌ Exploration failed: ${error instanceof Error ? error.message : String(error)}`)
-        process.exit(1)
+        logger.log({ event: 'autoqa.plan.explore.failed', runId, error: sanitizeErrorMessage(error) })
+        console.error(`❌ Exploration failed: ${sanitizeErrorMessage(error)}`)
+        process.exit(RUNTIME_ERROR_EXIT_CODE)
       } finally {
-        // Close browser properly - persistentContext or browser
-        if (browserResult?.persistentContext) {
-          await browserResult.persistentContext.close().catch(() => {})
-        } else if (browserResult?.browser) {
-          await browserResult.browser.close().catch(() => {})
-        }
+        await closeBrowserSafely(browserResult)
       }
     })
 
@@ -166,20 +221,11 @@ export function registerPlanCommand(program: Command): void {
       const cwd = process.cwd()
       const logger = createLogger({ runId, cwd, debug: false, writeToFile: true })
       
-      const configResult = readConfig(cwd)
-      if (!configResult.ok) {
-        console.error(`❌ Configuration error: ${configResult.error.message}`)
-        process.exit(2)
+      const configLoad = loadAndMergeConfig(cwd, options)
+      if (!configLoad.ok) {
+        process.exit(configLoad.exitCode)
       }
-
-      let config: PlanConfig
-      try {
-        const merged = mergeConfigWithOptions(configResult.config, options)
-        config = merged.config
-      } catch (error) {
-        console.error(`❌ ${error instanceof Error ? error.message : String(error)}`)
-        process.exit(2)
-      }
+      const config = configLoad.config
 
       try {
         const result = await generateTestPlan({
@@ -189,7 +235,6 @@ export function registerPlanCommand(program: Command): void {
           cwd: process.cwd(),
         })
 
-        // Report results
         console.log(`\n✅ Test plan generated for runId: ${runId}`)
         console.log(`📋 Test cases created: ${result.plan.cases.length}`)
         console.log(`📁 Test specs written to: .autoqa/runs/${runId}/plan/specs/`)
@@ -199,9 +244,9 @@ export function registerPlanCommand(program: Command): void {
           result.output.errors.forEach((e) => console.error(`  - ${e}`))
         }
       } catch (error) {
-        logger.log({ event: 'autoqa.plan.generate.failed', runId, error: error instanceof Error ? error.message : String(error) })
-        console.error(`❌ Test plan generation failed: ${error instanceof Error ? error.message : String(error)}`)
-        process.exit(1)
+        logger.log({ event: 'autoqa.plan.generate.failed', runId, error: sanitizeErrorMessage(error) })
+        console.error(`❌ Test plan generation failed: ${sanitizeErrorMessage(error)}`)
+        process.exit(RUNTIME_ERROR_EXIT_CODE)
       }
     })
 
@@ -210,7 +255,7 @@ export function registerPlanCommand(program: Command): void {
     .command('run')
     .description('Run exploration and test case generation in sequence')
     .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
-    .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth, 3)
+    .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth)
     .option('--max-pages <number>', 'Maximum pages to visit', validatePositiveInt)
     .option('--max-agent-turns <number>', 'Maximum agent tool calls (guardrail)', validatePositiveInt)
     .option('--max-snapshots <number>', 'Maximum snapshots to capture (guardrail)', validatePositiveInt)
@@ -294,16 +339,105 @@ export function registerPlanCommand(program: Command): void {
         console.log(`  - Test specs: ${testPlanResult.output.specPaths.length} files`)
 
       } catch (error) {
-        logger.log({ event: 'autoqa.plan.failed', runId, error: error instanceof Error ? error.message : String(error) })
-        console.error(`❌ Plan command failed: ${error instanceof Error ? error.message : String(error)}`)
-        process.exit(1)
+        logger.log({ event: 'autoqa.plan.failed', runId, error: sanitizeErrorMessage(error) })
+        console.error(`❌ Plan command failed: ${sanitizeErrorMessage(error)}`)
+        process.exit(RUNTIME_ERROR_EXIT_CODE)
       } finally {
-        // Close browser properly - persistentContext or browser
-        if (browserResult?.persistentContext) {
-          await browserResult.persistentContext.close().catch(() => {})
-        } else if (browserResult?.browser) {
-          await browserResult.browser.close().catch(() => {})
+        await closeBrowserSafely(browserResult)
+      }
+    })
+
+  plan
+    .description('Plan and explore test scenarios (default: run full exploration + generation)')
+    .requiredOption('-u, --url <url>', 'Target application URL', validateUrl)
+    .option('-d, --depth <number>', 'Maximum exploration depth (0-10)', validateDepth)
+    .option('--max-pages <number>', 'Maximum pages to visit', validatePositiveInt)
+    .option('--max-agent-turns <number>', 'Maximum agent tool calls (guardrail)', validatePositiveInt)
+    .option('--max-snapshots <number>', 'Maximum snapshots to capture (guardrail)', validatePositiveInt)
+    .option('--test-types <types>', 'Comma-separated list of test types')
+    .option('--login-url <url>', 'Login page URL (optional)', validateUrl)
+    .option('--username <username>', 'Login username (optional)')
+    .option('--password <password>', 'Login password (optional)')
+    .option('--headless', 'Run browser in headless mode', false)
+    .action(async (options) => {
+      const runId = randomUUID()
+      const cwd = process.cwd()
+      const logger = createLogger({ runId, cwd, debug: false, writeToFile: true })
+
+      const configLoad = loadAndMergeConfig(cwd, options)
+      if (!configLoad.ok) {
+        process.exit(configLoad.exitCode)
+      }
+      const config = configLoad.config
+
+      let browserResult = null
+
+      try {
+        console.log(`🔍 Starting exploration...`)
+        browserResult = await createBrowser({ headless: options.headless })
+
+        const explorationResult = await explore({
+          config,
+          browser: browserResult.browser,
+          logger,
+          runId,
+          cwd: process.cwd(),
+        })
+
+        const explorationOutput = await writeExplorationResult(explorationResult, { runId, cwd: process.cwd() })
+
+        if (explorationOutput.errors.length > 0) {
+          console.error(`\n⚠️ Exploration errors:`)
+          explorationOutput.errors.forEach((e) => console.error(`  - ${e}`))
         }
+
+        console.log(`\n✅ Exploration completed`)
+        console.log(`📊 Pages visited: ${explorationResult.stats.pagesVisited}`)
+        console.log(`📁 Exploration results: .autoqa/runs/${runId}/plan-explore/`)
+
+        if (explorationResult.guardrailTriggered) {
+          console.warn(`\n⚠️ Guardrail triggered: ${explorationResult.guardrailTriggered.code}`)
+          console.warn(`   Limit: ${explorationResult.guardrailTriggered.limit}, Actual: ${explorationResult.guardrailTriggered.actual}`)
+          logger.log({ 
+            event: 'autoqa.plan.explore.finished', 
+            runId, 
+            stats: explorationResult.stats 
+          })
+          process.exit(GUARDRAIL_EXIT_CODE)
+        }
+
+        console.log(`\n📋 Generating test cases...`)
+        const testPlanResult = await generateTestPlan({
+          runId,
+          config,
+          logger,
+          cwd: process.cwd(),
+        })
+
+        console.log(`\n✅ Test plan generated`)
+        console.log(`📝 Test cases created: ${testPlanResult.plan.cases.length}`)
+        console.log(`📁 Test specs: .autoqa/runs/${runId}/plan/specs/`)
+
+        if (testPlanResult.output.errors.length > 0) {
+          console.error(`\n⚠️ Test plan errors:`)
+          testPlanResult.output.errors.forEach((e) => console.error(`  - ${e}`))
+        }
+
+        console.log(`\n🎉 Plan command completed successfully!`)
+        console.log(`Run ID: ${runId}`)
+        console.log(`Total artifacts:`)
+        if (explorationOutput.graphPath) console.log(`  - Exploration graph: ${explorationOutput.graphPath}`)
+        if (explorationOutput.elementsPath) console.log(`  - Elements: ${explorationOutput.elementsPath}`)
+        if (explorationOutput.transcriptPath) console.log(`  - Transcript: ${explorationOutput.transcriptPath}`)
+        console.log(`  - Test plan: .autoqa/runs/${runId}/plan/test-plan.json`)
+        console.log(`  - Test specs: ${testPlanResult.output.specPaths.length} files`)
+
+      } catch (error) {
+        logger.log({ event: 'autoqa.plan.failed', runId, error: sanitizeErrorMessage(error) })
+        console.error(`❌ Plan command failed: ${sanitizeErrorMessage(error)}`)
+        process.exit(RUNTIME_ERROR_EXIT_CODE)
+      } finally {
+        await closeBrowserSafely(browserResult)
       }
     })
 }

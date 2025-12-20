@@ -39,6 +39,15 @@ function sanitizePathSegment(value: string): string {
   return cleaned.length > 0 ? cleaned : 'unknown'
 }
 
+function validateRelativePath(path: string): boolean {
+  if (!path || typeof path !== 'string') return false
+  if (path.includes('..')) return false
+  if (path.startsWith('/')) return false
+  if (path.includes('\\')) return false
+  const normalized = path.replace(/\/+/g, '/')
+  return normalized === path
+}
+
 /**
  * Write explore-graph.json
  * Contains page nodes and navigation edges
@@ -276,12 +285,18 @@ export async function writeTestPlan(
     const safeRel = rawRel.length > 0
       ? rawRel
       : `${sanitizePathSegment(`${testCase.type}-${testCase.priority}-${testCase.id}`)}.md`
-    if (safeRel.includes('..')) {
-      errors.push(`Invalid markdownPath for case ${testCase.id}: must not contain '..'`)
+    
+    if (!validateRelativePath(safeRel)) {
+      errors.push(`Invalid markdownPath for case ${testCase.id}: path traversal or absolute path not allowed`)
       continue
     }
 
     const specAbsPath = resolve(specsDir, safeRel)
+    if (!specAbsPath.startsWith(specsDir)) {
+      errors.push(`Invalid markdownPath for case ${testCase.id}: resolved path outside specs directory`)
+      continue
+    }
+    
     const specDir = dirname(specAbsPath)
 
     try {
@@ -308,33 +323,66 @@ export async function writeTestPlan(
   return output
 }
 
+/**
+ * Plan summary artifact structure
+ * Written to .autoqa/runs/<runId>/plan/plan-summary.json
+ * 
+ * Provides a high-level overview of the plan execution including:
+ * - Exploration statistics (pages visited, elements found, etc.)
+ * - Test plan statistics (cases generated, test types, priorities)
+ * - Guardrail information if triggered
+ * - Exit code for the plan execution
+ */
 export type PlanSummary = {
+  /** Unique identifier for this plan run */
   runId: string
+  /** ISO 8601 timestamp when the summary was generated */
   generatedAt: string
+  /** Base URL of the application under test */
   baseUrl: string
+  /** Statistics from the exploration phase */
   exploration: {
+    /** Number of pages visited during exploration */
     pagesVisited: number
+    /** Total number of interactive elements found */
     elementsFound: number
+    /** Number of forms discovered */
     formsFound: number
+    /** Number of links discovered */
     linksFound: number
+    /** Maximum depth reached during exploration */
     maxDepthReached: number
+    /** Configured maximum depth for exploration */
     configuredDepth: number
   }
+  /** Statistics from the test plan generation phase */
   testPlan: {
+    /** Total number of test cases generated */
     casesGenerated: number
+    /** List of unique test types in the plan */
     testTypes: string[]
+    /** Count of test cases by priority level */
     priorities: {
+      /** Critical priority test cases */
       p0: number
+      /** High priority test cases */
       p1: number
+      /** Medium priority test cases */
       p2: number
     }
   }
+  /** Information about guardrail trigger if it occurred */
   guardrailTriggered?: {
+    /** Guardrail code that was triggered */
     code: string
+    /** Configured limit for the guardrail */
     limit: number
+    /** Actual value that exceeded the limit */
     actual: number
+    /** ISO 8601 timestamp when guardrail was triggered */
     triggeredAt: string
   }
+  /** Exit code: 0 for success, 10 for guardrail, 1 for error, 2 for config error */
   exitCode: number
 }
 
@@ -374,15 +422,31 @@ export async function writePlanSummary(options: WritePlanSummaryOptions): Promis
       maxDepthReached: exploration?.stats.maxDepthReached ?? 0,
       configuredDepth: exploration?.stats.configuredDepth ?? 0,
     },
-    testPlan: {
-      casesGenerated: plan?.cases.length ?? 0,
-      testTypes: plan ? [...new Set(plan.cases.map(c => c.type))] : [],
-      priorities: {
-        p0: plan?.cases.filter(c => c.priority === 'p0').length ?? 0,
-        p1: plan?.cases.filter(c => c.priority === 'p1').length ?? 0,
-        p2: plan?.cases.filter(c => c.priority === 'p2').length ?? 0,
-      },
-    },
+    testPlan: (() => {
+      if (!plan || !plan.cases.length) {
+        return {
+          casesGenerated: 0,
+          testTypes: [],
+          priorities: { p0: 0, p1: 0, p2: 0 },
+        }
+      }
+      
+      const typeSet = new Set<string>()
+      const priorities = { p0: 0, p1: 0, p2: 0 }
+      
+      for (const testCase of plan.cases) {
+        typeSet.add(testCase.type)
+        if (testCase.priority === 'p0') priorities.p0++
+        else if (testCase.priority === 'p1') priorities.p1++
+        else if (testCase.priority === 'p2') priorities.p2++
+      }
+      
+      return {
+        casesGenerated: plan.cases.length,
+        testTypes: Array.from(typeSet),
+        priorities,
+      }
+    })(),
     exitCode,
   }
 
