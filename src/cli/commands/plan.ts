@@ -111,8 +111,11 @@ export function registerPlanCommand(program: Command): void {
         console.error(`❌ Exploration failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       } finally {
-        if (browserResult?.close) {
-          await browserResult.close()
+        // Close browser properly - persistentContext or browser
+        if (browserResult?.persistentContext) {
+          await browserResult.persistentContext.close().catch(() => {})
+        } else if (browserResult?.browser) {
+          await browserResult.browser.close().catch(() => {})
         }
       }
     })
@@ -268,8 +271,11 @@ export function registerPlanCommand(program: Command): void {
         console.error(`❌ Plan command failed: ${error instanceof Error ? error.message : String(error)}`)
         process.exit(1)
       } finally {
-        if (browserResult?.close) {
-          await browserResult.close()
+        // Close browser properly - persistentContext or browser
+        if (browserResult?.persistentContext) {
+          await browserResult.persistentContext.close().catch(() => {})
+        } else if (browserResult?.browser) {
+          await browserResult.browser.close().catch(() => {})
         }
       }
     })

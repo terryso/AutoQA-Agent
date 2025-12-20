@@ -313,7 +313,7 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
       console.error(`[explore] Calling Agent SDK with maxTurns: ${guardrailLimits.maxAgentTurns}`)
     }
 
-    response = query({
+    const response = query({
       prompt,
       options: {
         maxTurns: guardrailLimits.maxAgentTurns,
@@ -535,6 +535,15 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
             console.error(`[explore] Result text added to output (${message.text.length} chars)`)
           }
         }
+        
+        // Check if this is the final result indicating completion
+        if (message?.subtype === 'success') {
+          if (debug) {
+            console.error(`[explore] Received success result, breaking loop`)
+          }
+          break
+        }
+        
         continue
       }
 
@@ -552,6 +561,10 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
         console.error(`[explore] Unhandled message type: ${message?.type}`)
       }
     }
+    
+    if (debug) {
+      console.error(`[explore] Exited for-await loop normally`)
+    }
   } catch (err) {
     lastError = err instanceof Error ? err : new Error(String(err))
     console.error('[explore] Error during exploration:', err)
@@ -565,12 +578,10 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
   const finishedAt = new Date().toISOString()
 
   // Debug: Check if we have any final messages or results
-  if (debug) {
-    console.error(`[explore] Finished iterating over response`)
-    console.error(`[explore] Total messages processed: ${messageCount}`)
-    console.error(`[explore] Total turns processed: ${turnCount}`)
-    console.error(`[explore] Last error: ${lastError?.message || 'None'}`)
-  }
+  console.error(`[explore] Finished iterating over response`)
+  console.error(`[explore] Total messages processed: ${messageCount}`)
+  console.error(`[explore] Total turns processed: ${turnCount}`)
+  console.error(`[explore] Last error: ${lastError?.message || 'None'}`)
 
   // Debug: Log agent output
   console.error(`[explore] Agent output length: ${agentOutput.length}`)
