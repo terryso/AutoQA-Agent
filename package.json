@@ -12,7 +12,6 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
-    "test:e2e": "vitest run --config vitest.config.e2e.ts",
     "autoqa:run": "AUTOQA_CHROMIUM_USER_DATA_DIR=.autoqa/chromium-profile node dist/cli.js run"
   },
   "dependencies": {
