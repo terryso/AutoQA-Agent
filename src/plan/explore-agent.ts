@@ -243,6 +243,12 @@ function parseExplorationResult(agentOutput: string): {
 
 export async function runExploreAgent(options: ExploreAgentOptions): Promise<ExplorationResult> {
   const { runId, config, page, cwd, logger, debug = false } = options
+
+  // Set stream close timeout to prevent premature closure (same as runAgent)
+  if (!process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT) {
+    process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '60000'
+  }
+
   const startedAt = new Date().toISOString()
 
   const transcript: TranscriptEntry[] = []
@@ -291,7 +297,7 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
   }
 
   const prompt = buildExplorePrompt(config)
-  
+
   // Record the prompt in transcript
   transcript.push({
     timestamp: new Date().toISOString(),
@@ -307,7 +313,7 @@ export async function runExploreAgent(options: ExploreAgentOptions): Promise<Exp
       console.error(`[explore] Calling Agent SDK with maxTurns: ${guardrailLimits.maxAgentTurns}`)
     }
 
-    const response = query({
+    response = query({
       prompt,
       options: {
         maxTurns: guardrailLimits.maxAgentTurns,

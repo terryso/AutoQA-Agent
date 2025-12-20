@@ -34,7 +34,10 @@ export async function explore(options: ExploreOptions): Promise<ExplorationResul
   const debug = process.env.DEBUG === '1' || process.env.AUTOQA_DEBUG === '1'
 
   // Create browser context and page
-  const context = await browser.newContext()
+  // Use viewport null for fullscreen (consistent with run command debug mode)
+  const context = await browser.newContext({
+    viewport: null, // This enables fullscreen like run command
+  })
   const page = await context.newPage()
 
   if (debug) {
