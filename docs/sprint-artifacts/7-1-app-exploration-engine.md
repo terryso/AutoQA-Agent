@@ -1,6 +1,6 @@
 # Story 7.1: Agent 驱动的应用探索 Session（`autoqa plan explore`）
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 

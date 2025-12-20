@@ -87,7 +87,7 @@ development_status:
   epic-6-retrospective: optional
 
   epic-7: in-progress
-  7-1-app-exploration-engine: ready-for-dev
+  7-1-app-exploration-engine: in-progress
   7-2-intelligent-test-case-generator: backlog
   7-3-plan-command-implementation: backlog
   7-4-configurable-exploration-strategy: backlog
