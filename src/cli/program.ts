@@ -2,6 +2,7 @@ import { Command } from 'commander'
 
 import { registerInitCommand, type InitCommandDeps } from './commands/init.js'
 import { registerRunCommand } from './commands/run.js'
+import { registerPlanCommand } from './commands/plan.js'
 
 export type CreateProgramOptions = {
   initCommandDeps?: InitCommandDeps
@@ -14,6 +15,7 @@ export function createProgram(options: CreateProgramOptions = {}) {
 
   registerInitCommand(program, options.initCommandDeps)
   registerRunCommand(program)
+  registerPlanCommand(program)
 
   return program
 }

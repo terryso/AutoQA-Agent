@@ -85,6 +85,64 @@ export type SpecFailureScreenshotEvent = LogEventBase & {
   screenshotPath: string
 }
 
+export type PlanExploreStartedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.started'
+  url: string
+  depth: number
+}
+
+export type PlanExploreFinishedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.finished'
+  stats: {
+    pagesVisited: number
+    elementsFound: number
+    formsFound: number
+    linksFound: number
+    maxDepthReached: number
+    configuredDepth: number
+  }
+}
+
+export type PlanExploreFailedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.failed'
+  error: string
+}
+
+export type PlanExploreLoginStartedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.login.started'
+  loginUrl: string
+}
+
+export type PlanExploreLoginFinishedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.login.finished'
+  ok: boolean
+}
+
+export type PlanExploreLoginFailedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.login.failed'
+  error: string
+}
+
+export type PlanExplorePageStartedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.page.started'
+  url: string
+  depth: number
+}
+
+export type PlanExplorePageFinishedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.page.finished'
+  url: string
+  elementsFound: number
+  formsFound: number
+  linksFound: number
+}
+
+export type PlanExplorePageFailedEvent = LogEventBase & {
+  event: 'autoqa.plan.explore.page.failed'
+  url: string
+  error: string
+}
+
 export type LogEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -94,3 +152,12 @@ export type LogEvent =
   | ToolResultEvent
   | GuardrailTriggeredEvent
   | SpecFailureScreenshotEvent
+  | PlanExploreStartedEvent
+  | PlanExploreFinishedEvent
+  | PlanExploreFailedEvent
+  | PlanExploreLoginStartedEvent
+  | PlanExploreLoginFinishedEvent
+  | PlanExploreLoginFailedEvent
+  | PlanExplorePageStartedEvent
+  | PlanExplorePageFinishedEvent
+  | PlanExplorePageFailedEvent
