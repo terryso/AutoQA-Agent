@@ -8,7 +8,6 @@ on:
 # 设置权限
 permissions:
   contents: write
-  releases: write
 
 jobs:
   release:
