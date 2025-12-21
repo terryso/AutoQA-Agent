@@ -177,7 +177,7 @@ describe('Planner Markdown Output', () => {
         markdownPath: 'cart-ops.md',
         preconditions: [
           'Base URL accessible: {{BASE_URL}}',
-          'User is logged in',
+          'User is already logged in',
         ],
         steps: [
           {
@@ -211,9 +211,9 @@ describe('Planner Markdown Output', () => {
         }
       }
 
-      // Now includes login include step + 3 original steps = 4 total
-      expect(stepCount).toBe(4)
-      // Include step has no Expected line, so still 3
+      // User is already logged in, so NO login include step + 3 original steps = 3 total
+      expect(stepCount).toBe(3)
+      // All 3 steps have Expected lines
       expect(expectedCount).toBe(3)
     })
 

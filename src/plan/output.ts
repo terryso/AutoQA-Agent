@@ -214,25 +214,67 @@ export type BuildMarkdownOptions = {
 
 /**
  * Determines if a test case requires login based on preconditions and steps.
- * Heuristics:
- * - Preconditions mention "login", "logged in", "authenticated", "account"
- * - Steps reference {{USERNAME}}, {{PASSWORD}}, or {{LOGIN_BASE_URL}}
- * - Test type is 'form' and relates to authentication flows
+ * 
+ * Priority:
+ * 1. If testCase.requiresLogin is explicitly set (true/false), use that value
+ * 2. Otherwise, apply heuristics:
+ *    - Steps reference {{USERNAME}}, {{PASSWORD}}, or {{LOGIN_BASE_URL}} → requires login
+ *    - Preconditions mention "User is already logged in" or "already authenticated" → does NOT require login
+ *    - Preconditions mention "login", "authenticate", "credentials" (but not "already") → requires login
+ * 
+ * This reduces false positives from overly broad keywords like "account".
  */
 function requiresLogin(testCase: TestCasePlan): boolean {
+  // Priority 1: Explicit flag takes precedence
+  if (testCase.requiresLogin !== undefined) {
+    return testCase.requiresLogin
+  }
+  
   const preconditionsText = (testCase.preconditions ?? []).join(' ').toLowerCase()
   const stepsText = (testCase.steps ?? []).map(s => s.description).join(' ')
   
-  // Check preconditions for login-related keywords
-  const loginKeywords = ['login', 'logged in', 'authenticated', 'account', 'credentials']
-  const hasPreconditionMatch = loginKeywords.some(keyword => preconditionsText.includes(keyword))
-  
-  // Check steps for credential template variables or login URL
+  // Priority 2: Check steps for credential template variables or login URL
   const hasCredentialVars = stepsText.includes('{{USERNAME}}') || 
                             stepsText.includes('{{PASSWORD}}') ||
                             stepsText.includes('{{LOGIN_BASE_URL}}')
   
-  return hasPreconditionMatch || hasCredentialVars
+  if (hasCredentialVars) {
+    return true
+  }
+  
+  // Priority 3: Check if user is already logged in (should NOT add login include)
+  const alreadyLoggedInPatterns = [
+    'already logged in',
+    'already authenticated',
+    'user is logged in',
+    'is authenticated',
+  ]
+  
+  const isAlreadyLoggedIn = alreadyLoggedInPatterns.some(pattern => 
+    preconditionsText.includes(pattern)
+  )
+  
+  if (isAlreadyLoggedIn) {
+    return false
+  }
+  
+  // Priority 4: Check for login action keywords (tightened list)
+  // Removed overly broad keywords like "account" and "credentials"
+  const loginActionKeywords = [
+    'needs to log in',
+    'needs to authenticate',
+    'needs authentication',
+    'requires login',
+    'requires authentication',
+    'must log in',
+    'must authenticate',
+  ]
+  
+  const needsLoginAction = loginActionKeywords.some(keyword => 
+    preconditionsText.includes(keyword)
+  )
+  
+  return needsLoginAction
 }
 
 export function buildMarkdownForTestCase(

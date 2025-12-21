@@ -95,7 +95,7 @@ ${exampleUrls.join('\n')}
 Note: If LOGIN_BASE_URL is not provided, it defaults to BASE_URL for all URLs.`
 }
 
-function buildPlanPrompt(options: PlanAgentOptions): string {
+export function buildPlanPrompt(options: PlanAgentOptions): string {
   const { config, graph } = options
   const pagesSummaryLines: string[] = []
   for (const page of graph.pages) {
@@ -136,46 +136,95 @@ ${pagesSummary}
 
 ${urlMappingExamples}
 
-You must:
-- Decide which pages should receive which types of tests (functional/form/navigation/responsive/boundary/security).
-- Group related cases into flows when appropriate.
-- Use template variables for all URLs and credentials (see URL Mapping and Template Variables section above).
-- Produce clear, executable natural language descriptions and expected results.
+# Test Planning Principles
 
-CRITICAL Markdown Structure Requirements:
+## 1. Comprehensive Scenario Coverage
+
+For each key behavior discovered during exploration (search, forms, login, CRUD operations, navigation), you MUST generate:
+
+**Happy Path Cases:**
+- At least ONE test case covering the normal, successful flow
+- Use valid inputs and expected user interactions
+- Verify successful outcomes and state changes
+
+**Boundary & Negative Cases:**
+- At least ONE test case covering edge cases and error conditions
+- Examples of boundary/negative scenarios:
+  - Empty or missing required fields
+  - Invalid input formats (special characters, excessive length)
+  - Non-existent search queries (no results)
+  - Unauthorized access attempts
+  - Invalid credentials for login
+  - Boundary values (min/max lengths, numeric limits)
+
+## 2. Test Case Quality Standards
+
+Each test case MUST include:
+
+**Clear Initial State (Preconditions):**
+- Specify starting world state: logged in/out, cart empty/populated, specific data exists
+- Include environment requirements: URLs accessible, test accounts available
+- Use template variables for all URLs and credentials
+- Example: "User is logged out", "Shopping cart contains 2 items", "Test product 'Widget-A' exists in inventory"
+
+**Executable Steps with Specific Actions:**
+- Use action verbs: Navigate, Click, Fill, Select, Verify, Expect
+- Navigation steps MUST include full URLs with template variables
+  - CORRECT: "Navigate to {{BASE_URL}}/products/search"
+  - WRONG: "Go to search page" (too vague)
+- Interaction steps must specify exact element targets
+  - CORRECT: "Fill the 'Search' input field with 'laptop'"
+  - WRONG: "Enter search term" (missing specifics)
+
+**Verifiable Success Criteria (Expected Results):**
+- Each step MUST have a non-empty, specific expectedResult
+- Describe observable outcomes that can be automatically verified
+- CORRECT: "The search results show at least 1 product matching 'laptop'"
+- CORRECT: "Error message 'Username is required' appears below the username field"
+- WRONG: "The page works correctly" (too vague)
+- WRONG: "User sees results" (not specific enough)
+
+**Test Independence:**
+- Each test case should be executable independently
+- Avoid dependencies on side effects from other test cases
+- Set up required state in preconditions or initial steps
+
+## 3. Markdown Structure Requirements
+
 The generated test cases MUST be executable by the AutoQA runner. Follow these rules strictly:
 
-1. Preconditions:
-   - MUST include key URLs using template variables ({{BASE_URL}}, {{LOGIN_BASE_URL}})
-   - Example: "Base URL accessible: {{BASE_URL}}"
-   - Example: "Login page accessible: {{LOGIN_BASE_URL}}/login"
-   - If authentication required: "Valid test account available (via AUTOQA_USERNAME / AUTOQA_PASSWORD environment variables)"
-   - Describe initial state clearly (e.g., "Shopping cart is empty", "User is logged out")
+**Preconditions:**
+- MUST include key URLs using template variables ({{BASE_URL}}, {{LOGIN_BASE_URL}})
+- Example: "Base URL accessible: {{BASE_URL}}"
+- Example: "Login page accessible: {{LOGIN_BASE_URL}}/login"
+- If authentication required: "Valid test account available (via AUTOQA_USERNAME / AUTOQA_PASSWORD environment variables)"
+- Describe initial state clearly (e.g., "Shopping cart is empty", "User is logged out")
 
-2. Steps:
-   - Use executable action verbs: Navigate, Click, Fill, Select, Verify, Expect
-   - Navigation steps MUST include specific URLs with template variables
-     - CORRECT: "Navigate to {{BASE_URL}}/products"
-     - WRONG: "Navigate to products page" (too vague)
-   - For pages within the baseUrl domain, always use {{BASE_URL}} + relative path
-   - For login pages, use {{LOGIN_BASE_URL}} if different from baseUrl
-   - Verification steps should be specific and testable
-     - CORRECT: "Verify the page title is 'Products'"
-     - WRONG: "Verify the page loads correctly" (too vague)
+**Steps:**
+- Use executable action verbs: Navigate, Click, Fill, Select, Verify, Expect
+- Navigation steps MUST include specific URLs with template variables
+  - CORRECT: "Navigate to {{BASE_URL}}/products"
+  - WRONG: "Navigate to products page" (too vague)
+- For pages within the baseUrl domain, always use {{BASE_URL}} + relative path
+- For login pages, use {{LOGIN_BASE_URL}} if different from baseUrl
+- Verification steps should be specific and testable
+  - CORRECT: "Verify the page title is 'Products'"
+  - WRONG: "Verify the page loads correctly" (too vague)
 
-3. Expected Results:
-   - Each step's expectedResult MUST be non-empty and specific
-   - Describe observable, verifiable outcomes
-   - CORRECT: "The cart badge shows count of 1"
-   - WRONG: "The page works as expected" (too vague)
+**Expected Results:**
+- Each step's expectedResult MUST be non-empty and specific
+- Describe observable, verifiable outcomes
+- CORRECT: "The cart badge shows count of 1"
+- WRONG: "The page works as expected" (too vague)
 
-4. Credentials and Sensitive Data:
-   - Use {{USERNAME}} and {{PASSWORD}} placeholders
-   - Never include actual credentials in test cases
-   - Reference environment variables in preconditions
+**Credentials and Sensitive Data:**
+- Use {{USERNAME}} and {{PASSWORD}} placeholders
+- Never include actual credentials in test cases
+- Reference environment variables in preconditions
 
-Output requirements (CRITICAL):
-- Respond with JSON in the following shape, and nothing else:
+## 4. Output Format
+
+Respond with JSON in the following shape, and nothing else:
 {
   "flows": [
     {"id": "flow-id", "name": "Flow Name", "description": "...", "pagePath": ["page-id-1", "page-id-2"]}
@@ -190,7 +239,8 @@ Output requirements (CRITICAL):
       "markdownPath": "relative/path/to/spec.md",
       "preconditions": [
         "Base URL accessible: {{BASE_URL}}",
-        "Other specific preconditions with URLs using template variables..."
+        "User is logged out",
+        "Other specific preconditions with clear initial state..."
       ],
       "steps": [
         {
@@ -205,6 +255,8 @@ Output requirements (CRITICAL):
     }
   ]
 }
+
+CRITICAL: For each key behavior (search, form, login, CRUD), generate BOTH happy path AND boundary/negative cases.
 
 Do not include any commentary outside of the JSON structure.`
 }

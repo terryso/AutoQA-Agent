@@ -120,6 +120,33 @@ describe('Login Include E2E Integration', () => {
       expect(markdown).toContain('2. Verify at least one product is visible')
     })
 
+    it('should generate markdown with include for login-required test case', async () => {
+      const testCase: TestCasePlan = {
+        id: 'polyv-login-flow',
+        name: 'Polyv Login Flow',
+        type: 'form',
+        priority: 'p0',
+        relatedPageIds: ['page-login'],
+        markdownPath: 'polyv-login-flow.md',
+        requiresLogin: true,
+        preconditions: [
+          'Valid Polyv account available',
+        ],
+        steps: [
+          {
+            description: 'Navigate to {{BASE_URL}}/live',
+            expectedResult: 'Live page loads',
+          },
+        ],
+      }
+
+      const markdown = buildMarkdownForTestCase(testCase)
+
+      // Verify include directive is present
+      expect(markdown).toContain('1. include: login')
+      expect(markdown).toContain('2. Navigate to {{BASE_URL}}/live')
+    })
+
     it('should support custom loginStepsSpec path', () => {
       const testCase: TestCasePlan = {
         id: 'polyv-test-1',
@@ -128,6 +155,7 @@ describe('Login Include E2E Integration', () => {
         priority: 'p0',
         relatedPageIds: ['login'],
         markdownPath: 'polyv/login-test.md',
+        requiresLogin: true,
         preconditions: ['Valid Polyv account available'],
         steps: [
           {
@@ -170,6 +198,7 @@ describe('Login Include E2E Integration', () => {
         priority: 'p0',
         relatedPageIds: ['dashboard'],
         markdownPath: 'dashboard.md',
+        requiresLogin: true,
         preconditions: ['Valid test account available'],
         steps: [
           {
@@ -231,6 +260,7 @@ describe('Login Include E2E Integration', () => {
         priority: 'p0',
         relatedPageIds: ['page'],
         markdownPath: 'fallback.md',
+        requiresLogin: true,
         preconditions: ['User needs to be logged in'],
         steps: [
           {
@@ -291,6 +321,7 @@ describe('Login Include E2E Integration', () => {
         priority: 'p0',
         relatedPageIds: ['polyv'],
         markdownPath: 'polyv/feature.md',
+        requiresLogin: true,
         preconditions: ['Polyv account available'],
         steps: [
           {
@@ -340,6 +371,7 @@ describe('Login Include E2E Integration', () => {
         priority: 'p0',
         relatedPageIds: ['page'],
         markdownPath: 'missing.md',
+        requiresLogin: true,
         preconditions: ['User must be logged in'],
         steps: [
           {

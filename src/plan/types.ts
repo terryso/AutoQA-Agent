@@ -250,6 +250,15 @@ export type TestCasePlan = {
     description: string
     expectedResult: string
   }>
+  /**
+   * Explicit flag indicating whether this test case requires login.
+   * When true, the markdown generator will prepend `include: <loginStepsSpec>`.
+   * When false, no login include is added.
+   * When undefined, falls back to heuristic detection based on preconditions and steps.
+   * 
+   * Based on Tech Spec: ts-8-1-8-3-plan-scope-and-executable-specs.md#6.3.4
+   */
+  requiresLogin?: boolean
 }
 
 /**
