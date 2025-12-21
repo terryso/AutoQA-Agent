@@ -35,13 +35,13 @@
     "prepublishOnly": "npm run build && npm test",
     "prepack": "npm run build",
     "version": "npm run build && git add package.json",
-    "postversion": "git push --follow-tags",
+    "postversion": "",
     "release": "npm publish",
     "release:beta": "npm publish --tag beta",
-    "release:patch": "npm version patch && npm run release",
-    "release:minor": "npm version minor && npm run release",
-    "release:major": "npm version major && npm run release",
-    "pre-release": "npm version prerelease && npm run release:beta"
+    "release:patch": "npm version patch && git push && git push --follow-tags",
+    "release:minor": "npm version minor && git push && git push --follow-tags",
+    "release:major": "npm version major && git push && git push --follow-tags",
+    "pre-release": "npm version prerelease && git push && git push --follow-tags"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.1.69",

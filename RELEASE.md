@@ -2,7 +2,7 @@
 
 本项目配置了自动发布到 NPM 的 GitHub Actions。
 
-## 快速发布（本地发布）
+## 快速发布（推荐）
 
 最简单的方式，一键发布新版本：
 
@@ -22,10 +22,14 @@ npm run pre-release
 
 这个命令会自动：
 1. 更新 package.json 版本号
-2. 构建项目
-3. 发布到 NPM
-4. 创建版本标签
-5. 推送到 GitHub
+2. 创建 Git 标签
+3. 推送到 GitHub
+
+然后 **GitHub Actions 会自动**：
+- 运行测试
+- 构建项目
+- 发布到 NPM
+- 创建 GitHub Release
 
 ## 手动发布
 
