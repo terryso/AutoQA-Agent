@@ -5,15 +5,17 @@ const EXAMPLE_SPEC_CONTENT = `# Login Example
 
 ## Preconditions
 
-- Base URL is configured and reachable
-- You have valid test credentials
+- Base URL accessible: {{BASE_URL}}
+- Test credentials available via AUTOQA_USERNAME/AUTOQA_PASSWORD
 
 ## Steps
 
-1. Navigate to the login page
-2. Fill in username and password
-3. Click the "Sign in" button
-4. Verify the page shows a logged-in indicator
+1. Navigate to {{BASE_URL}}/
+2. Verify the page shows the login form with fields "Username" and "Password"
+3. Fill the "Username" field with {{USERNAME}}
+4. Fill the "Password" field with {{PASSWORD}}
+5. Click the "Login" button
+6. Verify the user is logged in and sees the inventory/products page (e.g. header shows "Products")
 `
 
 export function ensureExampleSpecs(
