@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loadEnvFiles, getEnvVar } from '../../src/test-utils/autoqa-env'
+import { loadEnvFiles, getEnvVar } from '../helpers/autoqa-env.js'
 
 loadEnvFiles()
 

@@ -11,7 +11,7 @@ import {
   AUTOQA_CONFIG_FILE_NAME,
   writeDefaultConfigFile,
 } from '../../config/init.js'
-import { ensureExampleSpecs } from '../../specs/init.js'
+import { ensureExampleSpecs, ensureTestHelpers } from '../../specs/init.js'
 import { probeAgentSdkAuth, type AgentSdkAuthProbeResult } from '../../auth/probe.js'
 
 function isAuthenticationFailed(code: unknown): boolean {
@@ -110,12 +110,47 @@ export function registerInitCommand(program: Command, deps: InitCommandDeps = {}
         return
       }
 
+      let didWriteHelper = false
+
+      try {
+        const result = ensureTestHelpers(cwd)
+        didWriteHelper = result.didWriteHelper
+      } catch (err: any) {
+        let rollbackMessage = ''
+        if (didWriteConfig) {
+          try {
+            unlinkSync(configPath)
+            rollbackMessage = ` Rolled back ${AUTOQA_CONFIG_FILE_NAME}.`
+          } catch (rollbackErr: any) {
+            rollbackMessage = ` Also failed to remove ${AUTOQA_CONFIG_FILE_NAME}: ${rollbackErr?.message ?? String(rollbackErr)}`
+          }
+        }
+
+        const message = `${err?.message ?? String(err)}${rollbackMessage}`
+
+        if (isUserCorrectableFsError(err)) {
+          program.error(`Failed to create tests/helpers/autoqa-env.ts: ${message}`, {
+            exitCode: 2,
+          })
+          return
+        }
+
+        program.error(`Failed to create tests/helpers/autoqa-env.ts: ${message}`)
+        return
+      }
+
       writeOutLine(writeOut, `Created ${AUTOQA_CONFIG_FILE_NAME}`)
 
       if (didWriteExample) {
         writeOutLine(writeOut, 'Created specs/login-example.md')
       } else {
         writeOutLine(writeOut, 'specs/login-example.md already exists. Skipping.')
+      }
+
+      if (didWriteHelper) {
+        writeOutLine(writeOut, 'Created tests/helpers/autoqa-env.ts')
+      } else {
+        writeOutLine(writeOut, 'tests/helpers/autoqa-env.ts already exists. Skipping.')
       }
 
       let probeResult: AgentSdkAuthProbeResult
@@ -129,15 +164,15 @@ export function registerInitCommand(program: Command, deps: InitCommandDeps = {}
       }
 
       if (probeResult.kind === 'available') {
-        writeOutLine(writeOut, '检测到 Claude Code 已授权（Agent SDK 可直接使用）。无需配置 ANTHROPIC_API_KEY。')
+        writeOutLine(writeOut, 'Detected Claude Code authorization (Agent SDK available). No ANTHROPIC_API_KEY needed.')
       } else if (probeResult.kind === 'authentication_failed') {
         if (hasAnthropicApiKey()) {
-          writeOutLine(writeOut, '未检测到 Claude Code 授权。已检测到 ANTHROPIC_API_KEY，将在后续运行时使用该 Key。')
+          writeOutLine(writeOut, 'Claude Code authorization not detected. ANTHROPIC_API_KEY found, will use it during runs.')
         } else {
-          writeOutLine(writeOut, '未检测到 Claude Code 授权。需要设置 ANTHROPIC_API_KEY。')
+          writeOutLine(writeOut, 'Claude Code authorization not detected. ANTHROPIC_API_KEY is required.')
         }
       } else {
-        writeOutLine(writeOut, '无法确认 Claude Code 授权状态，将在后续运行时再次校验。')
+        writeOutLine(writeOut, 'Unable to confirm Claude Code authorization status, will verify again during runs.')
       }
     })
 }

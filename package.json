@@ -1,6 +1,6 @@
 {
   "name": "autoqa-agent",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Automated QA testing agent powered by Claude and Playwright",
   "license": "MIT",
   "type": "module",
@@ -24,15 +24,18 @@
   "bin": {
     "autoqa": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "templates"
+  ],
   "exports": {
-    "./cli": "./dist/cli.js",
-    "./test-utils/autoqa-env": "./dist/test-utils/autoqa-env.js"
+    "./cli": "./dist/cli.js"
   },
   "engines": {
     "node": "^20.0.0 || ^22.0.0 || >=24.0.0"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && chmod +x dist/cli.js",
     "test": "vitest run",
     "test:ci": "vitest run",
     "autoqa:run": "AUTOQA_CHROMIUM_USER_DATA_DIR=.autoqa/chromium-profile node dist/cli.js run",

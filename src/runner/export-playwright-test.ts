@@ -5,6 +5,7 @@
  */
 
 import { writeFile } from 'node:fs/promises'
+import { join, relative } from 'node:path'
 
 import type { ActionRecord, FillValue } from '../ir/types.js'
 import type { MarkdownSpec, MarkdownSpecStep } from '../markdown/spec-types.js'
@@ -909,9 +910,10 @@ function generateTestFileContent(
   spec: MarkdownSpec,
   records: ActionRecord[],
   baseUrl: string,
-  loginBaseUrl?: string,
-  rawSpecContent?: string,
-  exportDir?: string,
+  loginBaseUrl: string | undefined,
+  rawSpecContent: string | undefined,
+  exportDir: string | undefined,
+  cwd: string,
 ): { content: string; errors: string[] } {
   const errors: string[] = []
   const stepCodes: string[] = []
@@ -944,8 +946,13 @@ function generateTestFileContent(
     ?.replace(/\.md$/i, '')
     ?.replace(/-/g, ' ') ?? 'Exported Test'
 
-  // Import helper from the npm package so generated tests work when autoqa-agent is installed as a dependency
-  const autoqaEnvImport = 'autoqa-agent/test-utils/autoqa-env'
+  // Calculate relative path to the helper file
+  // Helper is always at {cwd}/tests/helpers/autoqa-env.ts
+  // Test file is at {cwd}/{exportDir}/{spec-name}.spec.ts
+  const helperPath = join(cwd, 'tests/helpers/autoqa-env.ts')
+  const exportDirAbs = exportDir ? join(cwd, exportDir) : cwd
+  const importPath = relative(exportDirAbs, helperPath).replace(/\.ts$/, '')
+  const autoqaEnvImport = importPath.startsWith('../') ? importPath : `./${importPath}`
 
   const content = `import { test, expect } from '@playwright/test'
 import { loadEnvFiles, getEnvVar } from '${autoqaEnvImport}'
@@ -1003,7 +1010,7 @@ export async function exportPlaywrightTest(options: ExportOptions): Promise<Expo
   }
 
   // Generate test file content
-  const { content, errors } = generateTestFileContent(specPath, spec, records, baseUrl, loginBaseUrl, rawSpecContent, exportDir)
+  const { content, errors } = generateTestFileContent(specPath, spec, records, baseUrl, loginBaseUrl, rawSpecContent, exportDir, cwd)
 
   if (errors.length > 0) {
     return {

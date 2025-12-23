@@ -238,7 +238,7 @@ describe('autoqa init', () => {
 
       await program.parseAsync(['init'], { from: 'user' })
 
-      expect(stdout).toContain('无需配置 ANTHROPIC_API_KEY')
+      expect(stdout).toContain('No ANTHROPIC_API_KEY needed')
       expect(existsSync(join(tempDir, 'autoqa.config.json'))).toBe(true)
       expect(existsSync(join(tempDir, 'specs', 'login-example.md'))).toBe(true)
     } finally {
@@ -275,13 +275,132 @@ describe('autoqa init', () => {
 
       await program.parseAsync(['init'], { from: 'user' })
 
-      expect(stdout).toContain('需要设置 ANTHROPIC_API_KEY')
+      expect(stdout).toContain('ANTHROPIC_API_KEY is required')
       expect(existsSync(join(tempDir, 'autoqa.config.json'))).toBe(true)
       expect(existsSync(join(tempDir, 'specs', 'login-example.md'))).toBe(true)
     } finally {
       if (typeof originalApiKey === 'string') process.env.ANTHROPIC_API_KEY = originalApiKey
       else delete process.env.ANTHROPIC_API_KEY
 
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('creates tests/helpers/autoqa-env.ts with expected content', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-init-'))
+    const originalCwd = process.cwd()
+
+    try {
+      process.chdir(tempDir)
+
+      const program = createProgram({
+        initCommandDeps: {
+          probeAgentSdkAuth: async () => ({ kind: 'unknown' }),
+        },
+      })
+      program.configureOutput({
+        writeOut: () => {},
+        writeErr: () => {},
+      })
+
+      await program.parseAsync(['init'], { from: 'user' })
+
+      const helperPath = join(tempDir, 'tests/helpers/autoqa-env.ts')
+
+      expect(existsSync(helperPath)).toBe(true)
+
+      const contents = readFileSync(helperPath, 'utf8')
+      expect(contents).toContain('export function loadEnvFiles()')
+      expect(contents).toContain('export function getEnvVar(')
+      expect(contents).toContain('AutoQA Environment Helper')
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not overwrite existing tests/helpers/autoqa-env.ts', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-init-'))
+    const originalCwd = process.cwd()
+
+    let stdout = ''
+
+    try {
+      process.chdir(tempDir)
+
+      const helpersDirPath = join(tempDir, 'tests/helpers')
+      mkdirSync(helpersDirPath, { recursive: true })
+
+      const helperPath = join(helpersDirPath, 'autoqa-env.ts')
+      const customContents = '// Custom helper\nexport const custom = true\n'
+      writeFileSync(helperPath, customContents, 'utf8')
+
+      const program = createProgram({
+        initCommandDeps: {
+          probeAgentSdkAuth: async () => ({ kind: 'unknown' }),
+        },
+      })
+      program.configureOutput({
+        writeOut: (str: string) => {
+          stdout += str
+        },
+        writeErr: () => {},
+      })
+
+      await program.parseAsync(['init'], { from: 'user' })
+
+      expect(readFileSync(helperPath, 'utf8')).toBe(customContents)
+      expect(stdout).toContain('tests/helpers/autoqa-env.ts already exists. Skipping.')
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rolls back autoqa.config.json if tests/helpers directory cannot be created', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'autoqa-init-'))
+    const originalCwd = process.cwd()
+
+    try {
+      process.chdir(tempDir)
+
+      const testsPath = join(tempDir, 'tests')
+      mkdirSync(testsPath, { recursive: true })
+
+      const helpersPath = join(testsPath, 'helpers')
+      writeFileSync(helpersPath, 'not a directory', 'utf8')
+
+      let errOutput = ''
+
+      const program = createProgram({
+        initCommandDeps: {
+          probeAgentSdkAuth: async () => ({ kind: 'unknown' }),
+        },
+      })
+      program.configureOutput({
+        writeOut: () => {},
+        writeErr: (str) => {
+          errOutput += str
+        },
+      })
+      program.exitOverride()
+
+      let exitCode: number | undefined
+
+      try {
+        await program.parseAsync(['init'], { from: 'user' })
+      } catch (err: any) {
+        exitCode = err.exitCode
+      }
+
+      expect(exitCode).toBe(2)
+      expect(errOutput).toContain('Failed to create tests/helpers/autoqa-env.ts')
+      expect(errOutput).toContain('Rolled back autoqa.config.json')
+
+      const configPath = join(tempDir, 'autoqa.config.json')
+      expect(existsSync(configPath)).toBe(false)
+    } finally {
       process.chdir(originalCwd)
       rmSync(tempDir, { recursive: true, force: true })
     }
@@ -312,7 +431,7 @@ describe('autoqa init', () => {
 
       await program.parseAsync(['init'], { from: 'user' })
 
-      expect(stdout).toContain('无法确认 Claude Code 授权状态')
+      expect(stdout).toContain('Unable to confirm Claude Code authorization status')
       expect(existsSync(join(tempDir, 'autoqa.config.json'))).toBe(true)
       expect(existsSync(join(tempDir, 'specs', 'login-example.md'))).toBe(true)
     } finally {

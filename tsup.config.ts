@@ -3,7 +3,6 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: {
     cli: 'src/cli/cli.ts',
-    'test-utils/autoqa-env': 'src/test-utils/autoqa-env.ts',
   },
   format: ['esm'],
   outDir: 'dist',
@@ -20,4 +19,6 @@ export default defineConfig({
       js: '.js',
     }
   },
+  // Copy template files to dist
+  publicDir: 'src/templates',
 })

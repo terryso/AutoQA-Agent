@@ -1,5 +1,26 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// Resolve template path: handle both bundled (global install) and source (test) environments
+// - Bundled: template is in same dir as the bundled JS
+// - Source: template is in src/templates/ relative to src/specs/
+function getTemplatePath(): string {
+  // Try bundled path first (template next to the bundled JS)
+  const bundledPath = join(__dirname, 'autoqa-env.template.ts')
+  if (existsSync(bundledPath)) {
+    return bundledPath
+  }
+
+  // Fall back to source path (src/templates/ relative to src/specs/)
+  return join(__dirname, '../templates/autoqa-env.template.ts')
+}
+
+const HELPER_TEMPLATE_PATH = getTemplatePath()
 
 const EXAMPLE_SPEC_CONTENT = `# Login Example
 
@@ -36,6 +57,33 @@ export function ensureExampleSpecs(
   } catch (err: any) {
     if (err?.code === 'EEXIST') {
       return { specsDirPath, exampleSpecPath, didWriteExample: false }
+    }
+
+    throw err
+  }
+}
+
+const HELPER_OUTPUT_PATH = 'tests/helpers/autoqa-env.ts'
+
+export function ensureTestHelpers(
+  cwd: string = process.cwd(),
+): { helpersDirPath: string; helperPath: string; didWriteHelper: boolean } {
+  const helpersDirPath = join(cwd, 'tests/helpers')
+  mkdirSync(helpersDirPath, { recursive: true })
+
+  const helperPath = join(cwd, HELPER_OUTPUT_PATH)
+
+  try {
+    const templateContent = readFileSync(HELPER_TEMPLATE_PATH, 'utf8')
+    writeFileSync(helperPath, templateContent, {
+      encoding: 'utf8',
+      flag: 'wx',
+    })
+
+    return { helpersDirPath, helperPath, didWriteHelper: true }
+  } catch (err: any) {
+    if (err?.code === 'EEXIST') {
+      return { helpersDirPath, helperPath, didWriteHelper: false }
     }
 
     throw err
