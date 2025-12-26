@@ -56,6 +56,8 @@ AutoQA-Agent 是一个创新的自动化测试工具，让 QA 和产品经理能
 - npm 或 yarn
 - Claude Code 已授权（推荐）或设置 `ANTHROPIC_API_KEY`
 
+> **注意**：由于 Agent SDK 需要使用 Claude Code 的订阅帐号或者 API，费用比较高。您也可以考虑使用 [GLM 编程套餐](https://www.bigmodel.cn/claude-code?ic=TVUZHTWCW9)，第一个月只需要 100 元，API 调用次数基本用不完。
+
 ### 安装
 
 ```bash

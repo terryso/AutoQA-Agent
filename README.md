@@ -56,6 +56,8 @@ For more detailed architecture boundaries and constraints, please refer to [`doc
 - npm or yarn
 - Claude Code authorized (recommended) or set `ANTHROPIC_API_KEY`
 
+> **Note**: Since Agent SDK requires a Claude Code subscription account or API key which can be costly, you may consider using [GLM Coding Plan](https://www.bigmodel.cn/claude-code?ic=TVUZHTWCW9) (first month only ¥100, API call count basically unlimited) as an alternative.
+
 ### Installation
 
 ```bash
