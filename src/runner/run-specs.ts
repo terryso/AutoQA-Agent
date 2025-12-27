@@ -91,6 +91,8 @@ export type SpecExportInfo = {
   exportPath: string
   ok: boolean
   reason?: string
+  /** Suggest interactive repair mode for this spec */
+  suggestRepairMode?: boolean
 }
 
 export type RunSpecsResult =
@@ -413,6 +415,7 @@ export async function runSpecs(options: RunSpecsOptions): Promise<RunSpecsResult
                 exportPath: relativeExportPath,
                 ok: false,
                 reason: exportResult.reason,
+                suggestRepairMode: exportResult.suggestRepairMode,
               })
             }
           } catch (exportErr: unknown) {

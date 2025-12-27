@@ -99,3 +99,11 @@ development_status:
   8-2-exploration-test-plan-url-scope: done
   8-3-planner-prompt-quality-standards: done
   epic-8-retrospective: optional
+
+  epic-9: in-progress
+  9-1-export-failure-auto-start-repair-mode: done
+  9-2-ir-replay-to-failed-step: done
+  9-3-interactive-element-picker: done
+  9-4-save-repair-results-and-re-export: done
+  9-5-manual-continuation: done
+  epic-9-retrospective: optional

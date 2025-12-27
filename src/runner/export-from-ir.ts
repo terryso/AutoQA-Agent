@@ -30,6 +30,8 @@ export type ExportFailure = {
   ok: false
   reason: string
   missingLocators?: string[]
+  /** Suggest interactive repair mode for fixing missing locators */
+  suggestRepairMode?: boolean
 }
 
 export type ExportResult = ExportSuccess | ExportFailure
@@ -901,8 +903,19 @@ export async function exportFromIR(options: ExportOptions): Promise<ExportResult
     }
   }
 
+  // Load repairs for this spec and apply them to records
+  let repairedRecords = records
+  try {
+    const { loadRepairsForSpec, applyRepairs } = await import('./apply-repairs.js')
+    const repairs = await loadRepairsForSpec(cwd, runId, specPath)
+    repairedRecords = applyRepairs(records, repairs)
+  } catch {
+    // If loading repairs fails, continue with original records
+    // This allows export to work even if repairs.json is missing or invalid
+  }
+
   // Check for missing locators on element-targeting actions
-  const missingLocatorActions = records.filter((r) => {
+  const missingLocatorActions = repairedRecords.filter((r) => {
     if (!r.outcome.ok) return false
     if (r.toolName === 'click' || r.toolName === 'fill' || r.toolName === 'select_option' || r.toolName === 'assertElementVisible') {
       return !hasValidChosenLocator(r)
@@ -920,6 +933,7 @@ export async function exportFromIR(options: ExportOptions): Promise<ExportResult
       ok: false,
       reason: `Export failed: ${missingLocatorActions.length} action(s) missing valid chosenLocator`,
       missingLocators: missingDetails,
+      suggestRepairMode: true,
     }
   }
 
@@ -927,7 +941,7 @@ export async function exportFromIR(options: ExportOptions): Promise<ExportResult
   const { content, errors } = generateTestFileContent(
     specPath,
     spec,
-    records,
+    repairedRecords,
     baseUrl,
     loginBaseUrl,
     rawSpecContent,

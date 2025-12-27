@@ -468,5 +468,18 @@ export function registerRunCommand(program: Command) {
       for (const specPath of result.specs) {
         writeOutLine(writeOut, specPath)
       }
+
+      // Check for export failures that suggest repair mode
+      const exportFailures = runResult.exports?.filter((e) => !e.ok && e.suggestRepairMode) ?? []
+      if (exportFailures.length > 0) {
+        writeOutLine(writeErr, '')
+        writeOutLine(writeErr, `⚠️  导出失败: ${exportFailures.length} 个 spec 缺少有效的 chosenLocator`)
+        for (const failure of exportFailures) {
+          writeOutLine(writeErr, `   - ${failure.specPath}: ${failure.reason}`)
+        }
+        writeOutLine(writeErr, '')
+        writeOutLine(writeErr, '💡 提示: 交互式修复模式即将推出，届时可通过 UI 修复这些失败的 locator')
+        writeOutLine(writeErr, `   runId: ${runId}`)
+      }
     })
 }

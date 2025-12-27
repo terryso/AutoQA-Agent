@@ -199,6 +199,108 @@ export type PlanFailedEvent = LogEventBase & {
   error: string
 }
 
+// Repair mode events
+export type RepairStartedEvent = LogEventBase & {
+  event: 'autoqa.repair.started'
+  specPath: string
+  repairMode: true
+}
+
+export type RepairBrowserLaunchedEvent = LogEventBase & {
+  event: 'autoqa.repair.browser_launched'
+  specPath: string
+  headless: false
+}
+
+export type RepairContextFailedEvent = LogEventBase & {
+  event: 'autoqa.repair.context_failed'
+  error: string
+}
+
+export type RepairStepsIdentifiedEvent = LogEventBase & {
+  event: 'autoqa.repair.steps_identified'
+  specPath: string
+  failedStepCount: number
+  firstFailedStepIndex: number
+  failedSteps: Array<{ stepIndex: number; toolName: string }>
+}
+
+export type RepairReplayFailedEvent = LogEventBase & {
+  event: 'autoqa.repair.replay.failed'
+  failedAtStep?: number
+  reason?: string
+  error?: string
+}
+
+export type RepairReplaySucceededEvent = LogEventBase & {
+  event: 'autoqa.repair.replay.succeeded'
+  replayedCount: number
+  currentStepIndex: number
+}
+
+export type RepairElementPickerAlreadyEnabledEvent = LogEventBase & {
+  event: 'autoqa.repair.element_picker.already_enabled'
+  specPath: string
+}
+
+export type RepairElementPickerEnabledEvent = LogEventBase & {
+  event: 'autoqa.repair.element_picker.enabled'
+  specPath: string
+}
+
+export type RepairElementPickerDisabledEvent = LogEventBase & {
+  event: 'autoqa.repair.element_picker.disabled'
+  specPath: string
+}
+
+export type RepairElementPickerDisableFailedEvent = LogEventBase & {
+  event: 'autoqa.repair.element_picker.disable_failed'
+  specPath: string
+  error: string
+}
+
+export type RepairElementSelectionWaitingEvent = LogEventBase & {
+  event: 'autoqa.repair.element_selection.waiting'
+  specPath: string
+}
+
+export type RepairElementSelectionReceivedEvent = LogEventBase & {
+  event: 'autoqa.repair.element_selection.received'
+  specPath: string
+  tagName: string
+  hasTestId: boolean
+  hasId: boolean
+}
+
+export type RepairElementSelectionFailedEvent = LogEventBase & {
+  event: 'autoqa.repair.element_selection.failed'
+  specPath: string
+  error: string
+}
+
+export type RepairLocatorValidatedEvent = LogEventBase & {
+  event: 'autoqa.repair.locator_validated'
+  specPath: string
+  locatorKind: string
+  locatorCode: string
+  isUnique: boolean
+  matchCount: number
+}
+
+export type RepairLocatorCandidatesGeneratedEvent = LogEventBase & {
+  event: 'autoqa.repair.locator_candidates.generated'
+  specPath: string
+  candidateCount: number
+  recommendedUnique: boolean
+}
+
+export type RepairLocatorPromptDisplayedEvent = LogEventBase & {
+  event: 'autoqa.repair.locator_prompt.displayed'
+  specPath: string
+  candidateCount: number
+  hasUnique: boolean
+}
+
 export type LogEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -227,3 +329,19 @@ export type LogEvent =
   | PlanStartedEvent
   | PlanFinishedEvent
   | PlanFailedEvent
+  | RepairStartedEvent
+  | RepairBrowserLaunchedEvent
+  | RepairContextFailedEvent
+  | RepairStepsIdentifiedEvent
+  | RepairReplayFailedEvent
+  | RepairReplaySucceededEvent
+  | RepairElementPickerAlreadyEnabledEvent
+  | RepairElementPickerEnabledEvent
+  | RepairElementPickerDisabledEvent
+  | RepairElementPickerDisableFailedEvent
+  | RepairElementSelectionWaitingEvent
+  | RepairElementSelectionReceivedEvent
+  | RepairElementSelectionFailedEvent
+  | RepairLocatorValidatedEvent
+  | RepairLocatorCandidatesGeneratedEvent
+  | RepairLocatorPromptDisplayedEvent
