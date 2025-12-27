@@ -67,13 +67,13 @@ development_status:
   3-4-failure-artifacts-exit-codes-ci: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-runtime-locator-validation-ir: done
   4-2-auto-export-playwright-test: done
   4-3-navigate-placeholder-semantic-urlvalue: backlog
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   5-1-env-base-url: done
   5-2-env-login-base-url: done
   5-3-markdown-template-vars: done
@@ -86,7 +86,7 @@ development_status:
   6-3-login-test-exception: backlog
   epic-6-retrospective: optional
 
-  epic-7: in-progress
+  epic-7: done
   7-1-app-exploration-engine: done
   7-2-intelligent-test-case-generator: done
   7-3-plan-command-implementation: done
@@ -94,16 +94,17 @@ development_status:
   7-5-integration-with-existing-toolchain: done
   epic-7-retrospective: optional
 
-  epic-8: in-progress
+  epic-8: done
   8-1-planner-generated-specs-executable: done
   8-2-exploration-test-plan-url-scope: done
   8-3-planner-prompt-quality-standards: done
   epic-8-retrospective: optional
 
-  epic-9: in-progress
+  epic-9: done
   9-1-export-failure-auto-start-repair-mode: done
   9-2-ir-replay-to-failed-step: done
   9-3-interactive-element-picker: done
   9-4-save-repair-results-and-re-export: done
   9-5-manual-continuation: done
+  9-6-cli-command-entry-repair: done
   epic-9-retrospective: optional

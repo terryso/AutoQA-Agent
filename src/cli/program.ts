@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { registerInitCommand, type InitCommandDeps } from './commands/init.js'
 import { registerRunCommand } from './commands/run.js'
 import { registerPlanCommand } from './commands/plan.js'
+import { registerRepairCommand } from './commands/repair.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -57,6 +58,7 @@ export function createProgram(options: CreateProgramOptions = {}) {
   registerInitCommand(program, options.initCommandDeps)
   registerRunCommand(program)
   registerPlanCommand(program)
+  registerRepairCommand(program)
 
   return program
 }
