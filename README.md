@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/terryso-autoqa-agent-badge.png)](https://mseep.ai/app/terryso-autoqa-agent)
+
 # AutoQA-Agent
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/terryso/autoqa-agent?style=flat-square)](https://github.com/terryso/autoqa-agent/stargazers)
